@@ -11,7 +11,16 @@ def helloworld(resp):
         print("Logged in as {}#{}".format(user['username'], user['discriminator']))
         print("The user is in the following servers: ")
         servers = client.getGuilds().json()
+        print(json.dumps(servers, indent=4))
         for i in servers:
-            print(json.dumps(i, indent=4))
+            print("The channels in server '" + i['name'] + "' are: ")
+            # For now we only consider the text channels
+            # All possible channel types: GUILD_TEXT, DM, GUILD_VOICE, GROUP_DM, GUILD_CATEGORY, GUILD_NEWS, GUILD_STORE, GUILD_NEWS_THREAD, GUILD_PUBLIC_THREAD, GUILD_PRIVATE_THREAD, GUILD_STAGE_VOICE
+            channel_types = ['guild_text', 'dm', 'group_dm', 'guild_news', 'guild_store', 'guild_news_thread', 'guild_public_thread', 'guild_private_thread']
+            channels = client.gateway.findVisibleChannels(i['id'], channel_types)
+            print(json.dumps(channels, indent=4))
+            for j in channels:
+                print("The messages in channel " + j + " are: ")
+                print(json.dumps(client.getMessages(j, 5).json(), indent=4))
 
 client.gateway.run(auto_reconnect=True)

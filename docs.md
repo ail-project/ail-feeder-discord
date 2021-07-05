@@ -28,6 +28,18 @@ Open-source library? &rarr; Yes
 
 [The official GitHub page](https://github.com/Merubokkusu/Discord-S.C.U.M)
 
+This is the library that is currently used in this project.
+
+Still maintained? &rarr; Yes
+
+Open-source library? &rarr; Yes
+
+# Discord&#46;js
+
+[The official page](https://discord.js.org/#/)
+
+Not currently used in this project, but one of the most used libraries out there.
+
 Still maintained? &rarr; Yes
 
 Open-source library? &rarr; Yes
