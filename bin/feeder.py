@@ -1,5 +1,8 @@
 import discum
 import json
+import hashlib
+import base64
+import gzip
 
 t = open("etc/token.txt", "r").read()
 client = discum.Client(token=t, log={"console":False, "file":False})
@@ -35,7 +38,14 @@ def createJson(message, server, channel):
     info = {}
     info['message:id'] = message['id']
     info['message:url'] = "https://discord.com/channels/" + server['id'] + "/" + channel + "/" + message['id']
-    info['message:content'] = message['content']
+
+    #Encoding the content of the message into base64
+    content_bytes = message['content'].encode('utf-8')
+    info['message:content-sha256'] = hashlib.sha256(content_bytes).hexdigest()
+    info['message:content'] = base64.b64encode(content_bytes).decode('utf-8')
+    
+    #info['message:content'] = message['content']
+
     info['channel:id'] = message['channel_id']
     info['sender:id'] = message['author']['id']
     info['sender:profile'] = message['author']['username'] + "#" + message['author']['discriminator']
