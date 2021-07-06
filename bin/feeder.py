@@ -5,6 +5,7 @@ import base64
 import time
 import os
 import argparse
+from urlextract import URLExtract
 
 t = open("etc/token.txt", "r").read()
 client = discum.Client(token=t, log={"console":False, "file":False})
@@ -35,7 +36,7 @@ def scanServer(server):
     # For now we only consider the text channels
     channel_types = ['guild_text', 'dm', 'group_dm', 'guild_news', 'guild_store', 'guild_news_thread', 'guild_public_thread', 'guild_private_thread']
     channels = client.gateway.findVisibleChannels(server['id'], channel_types)
-    
+
     for channel in channels:
         messages = client.searchMessages(guildID= server['id'], textSearch=args.query).json()
         # print(json.dumps(messages, indent=4))
@@ -45,6 +46,17 @@ def scanServer(server):
                 info = createJson(message[0], server, channel)
                 print("The formatted metadata of the message is:")
                 print(json.dumps(info, indent=4, sort_keys=True))
+        
+        messages = client.searchMessages(guildID=server['id'], has="link").json()
+        for message in messages['messages']:
+            extractURLs(message[0])
+
+def extractURLs(message):
+    extractor = URLExtract()
+    urls = extractor.find_urls(message['content'])
+    print(message['content'])
+    print("All extracted URLs from the message:")
+    print(urls)
 
 def createJson(message, server, channel):
     info = {}
@@ -73,20 +85,20 @@ def createJson(message, server, channel):
         a['type'] = attachment['content_type']
         info['attachments'].append(a)
 
-    info['usermentions'] = []
+    info['mentions:user'] = []
     for mention in message['mentions']:
         m = {}
         m['id'] = mention['id']
         m['sender:profile'] = mention['username'] + "#" + mention['discriminator']
         info['usermentions'].append(m)
 
-    info['rolementions'] = []
+    info['mentions:role'] = []
     for rolemention in message['mention_roles']:
         rm = {}
         rm['role:id'] = rolemention
         info['rolementions'].append(rm)
     
-    info['mentioneveryone'] = message['mention_everyone']
+    info['mentions:everyone'] = message['mention_everyone']
 
     info['reactions'] = []
     if 'reactions' in message:
