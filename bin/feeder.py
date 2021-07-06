@@ -3,8 +3,8 @@ import json
 import hashlib
 import base64
 import time
-import sys
 import os
+import argparse
 
 t = open("etc/token.txt", "r").read()
 client = discum.Client(token=t, log={"console":False, "file":False})
@@ -18,12 +18,14 @@ def start(resp):
         # Scan the servers the user is already on
         servers = client.getGuilds().json()
         for server in servers:
+            print("Scanning the servers the user is on...")
             scanServer(server)
-        
-        print("Sleeping for 5 seconds to avoid rate limits")
+        print("Done with the scan of existing servers!")
+
+        print("Sleeping for 5 seconds to avoid rate limits...")
         time.sleep(5)
         # Once we scanned all the servers the user is already on, we join the ones from server-invite-codes.txt and search those as well
-        joinServers()
+        #joinServers()
         print("Done! Exiting now...")
         os._exit(0)
 
@@ -34,12 +36,8 @@ def scanServer(server):
     channel_types = ['guild_text', 'dm', 'group_dm', 'guild_news', 'guild_store', 'guild_news_thread', 'guild_public_thread', 'guild_private_thread']
     channels = client.gateway.findVisibleChannels(server['id'], channel_types)
     
-    # print("The channels in server '" + i['name'] + "' are: ")
-    # print(json.dumps(channels, indent=4))
     for channel in channels:
         messages = client.getMessages(channel, 5).json()
-        # print("The messages in channel " + j + " are: ")
-        # print(json.dumps(messages, indent=4))
         for message in messages:
             info = createJson(message, server, channel)
             print("The formatted metadata of the message is:")
