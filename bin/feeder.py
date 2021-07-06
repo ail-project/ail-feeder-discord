@@ -17,8 +17,8 @@ def start(resp):
 
         # Scan the servers the user is already on
         servers = client.getGuilds().json()
+        print("Scanning the servers the user is on...")
         for server in servers:
-            print("Scanning the servers the user is on...")
             scanServer(server)
         print("Done with the scan of existing servers!")
 
@@ -37,11 +37,14 @@ def scanServer(server):
     channels = client.gateway.findVisibleChannels(server['id'], channel_types)
     
     for channel in channels:
-        messages = client.getMessages(channel, 5).json()
-        for message in messages:
-            info = createJson(message, server, channel)
-            print("The formatted metadata of the message is:")
-            print(json.dumps(info, indent=4, sort_keys=True))
+        messages = client.searchMessages(guildID= server['id'], textSearch=args.query).json()
+        # print(json.dumps(messages, indent=4))
+        # messages = client.getMessages(channel, 5).json()
+        if 'messages' in messages:
+            for message in messages['messages']:
+                info = createJson(message[0], server, channel)
+                print("The formatted metadata of the message is:")
+                print(json.dumps(info, indent=4, sort_keys=True))
 
 def createJson(message, server, channel):
     info = {}
@@ -96,7 +99,7 @@ def createJson(message, server, channel):
 
     info['timestamp'] = message['timestamp']
     info['edited_timestamp'] = message['edited_timestamp']
-    info['webhook_id'] = ''
+    info['webhook:id'] = ''
     if 'webhook_id' in message:
         info['webhook_id'] = message['webhook_id']
 
@@ -132,5 +135,13 @@ def joinServers():
         server = client.getInfoFromInviteCode(code).json()['guild']
         scanServer(server)
         print("Scan successful")
+
+parser = argparse.ArgumentParser()
+parser.add_argument("query", help="query to search on Discord to feed AIL")
+parser.add_argument("--verbose", help="verbose output", action="store_true")
+parser.add_argument("--nocache", help="disable cache", action="store_true")
+parser.add_argument("--messagelimit", help="maximum number of message to fetch", type=int, default=50) # TODO: replace hardcoded value with variable
+args = parser.parse_args()
+print(args)
 
 client.gateway.run(auto_reconnect=True)
