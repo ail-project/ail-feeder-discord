@@ -8,7 +8,7 @@ Discord feeder for AIL
 
 https://discord.com/developers/docs/intro
 
-## How to use?
+## How to use? (Work in progress)
 
 1. Create a file `token.txt` in the `etc/` folder in the root directory. Add the Discord token of the account you want to use. 
 [How to get the Discord user token](https://github.com/Tyrrrz/DiscordChatExporter/wiki/Obtaining-Token-and-Channel-IDs)
