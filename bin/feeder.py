@@ -38,25 +38,31 @@ def start(resp):
 
         # Scan the servers the user is already on
         servers = client.getGuilds().json()
-        print("Scanning the servers the user is on...")
+        print("Scanning the servers the user is on...\n")
         for server in servers:
+            scanned_servers.append(server['id'])
             print("Scanning '" + server['name'] + "' now...")
             scanServer(server)
-            print("Done scanning '" + server['name'] + "'")
+            print("Done scanning '" + server['name'] + "'\n")
         print("Done with the scan of existing servers!")
 
-        print("Sleeping for 5 seconds to avoid rate limits...")
+        print("Sleeping for 5 seconds to avoid rate limits...\n")
         time.sleep(5)
+        
         # Once we scanned all the servers the user is already on, we join the ones from server-invite-codes.txt and search those as well
-        #joinServers()
+        print("Joining the servers from the server invite codes...\n")
+        codes = open("etc/server-invite-codes.txt", "r")
+        for code in codes:
+            joinServer(code)
+        print("Done joining and scanning the given servers!\n")
 
         # TODO: This will be replaced with the continuous feed of messages check
-        print("Done! Exiting now...")
+        print("All done! Exiting now...")
         os._exit(0)
     
     # Continuously check for new messages
-    # if resp.event.message:
-    #     m = resp.parsed.auto()
+    #if resp.event.message:
+    #    m = resp.parsed.auto()
 
 
 def scanServer(server):
@@ -86,7 +92,6 @@ def scanServer(server):
         # print(json.dumps(messages, indent=4))
         # print("Found " + str(messages['total_results']) + " messages with a URL")
         for message in messages['messages']:
-            # print(message[0])
             extractURLs(message[0])
 
 
@@ -166,17 +171,19 @@ def createJson(message, server, channel):
         output_message['meta']['referenced-message']['channel-id'] = message['message_reference']['channel_id']
         output_message['meta']['referenced-message']['message-id'] = message['message_reference']['message_id']
         output_message['meta']['referenced-message']['url'] = "https://discord.com/channels/" + message['message_reference']['guild_id'] + "/" + message['message_reference']['channel_id'] + "/" + message['message_reference']['message_id']
-        # TODO: Call the message analyser method recursively
-        referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
-        # print(json.dumps(referenced_message[0], indent=4))
-        createJson(referenced_message[0], server, channel)
+
+        if (args.replies):
+            referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
+            # print(json.dumps(referenced_message[0], indent=4))
+            createJson(referenced_message[0], server, channel)
 
     #Encoding the content of the message into base64
     content_bytes = message['content'].encode('utf-8')
     output_message['data-sha256'] = hashlib.sha256(content_bytes).hexdigest()
     output_message['data'] = base64.b64encode(content_bytes).decode('utf-8')
-    output_message['message:content'] = message['content'] # TODO: comment out this line
+    # output_message['message:content'] = message['content']
 
+    print("Found a message which matches the query!")
     print("The JSON of the message is:")
     print(json.dumps(output_message, indent=4, sort_keys=True))
     # TODO: publish to AIL
@@ -202,10 +209,11 @@ def extractURLs(message):
         u = urlparse(surl)
 
         if u.hostname is not None:
-            # TODO: Check if it's an invite code and if so, join the server
             if "discord.gg" in u.hostname:
+                print("Found an invite link!")
+                code = u.path.replace("/", "")
+                joinServer(code)
                 continue
-            # TODO: Check if it is a link to another message in the server. Try to access and analyse it
             elif "discord.com" in u.hostname:
                 continue
 
@@ -242,7 +250,6 @@ def extractURLs(message):
 
         nlpFailed = False
 
-        # TODO: If nlp() fails, extract metadata instead
         try:
             article.nlp()
         except:
@@ -260,6 +267,7 @@ def extractURLs(message):
                         e[field] = embedded[field]
                 output['meta']['embedded-objects'].append(e)
 
+            print("Found a link!")
             print("The JSON of the extracted URL is:")
             print(json.dumps(output, indent=4, sort_keys=True))
             
@@ -277,23 +285,26 @@ def extractURLs(message):
         output['meta']['newspaper:top_image'] = article.top_image
         output['meta']['newspaper:movies'] = article.movies
 
+        print("Found a link!")
         print("The JSON of the extracted URL is:")
         print(json.dumps(output, indent=4, sort_keys=True))
         # TODO: publish to AIL
 
 
-def joinServers():
-    codes = open("etc/server-invite-codes.txt", "r")
-    for code in codes:
-        server = client.getInfoFromInviteCode(code).json()['guild']
-        print("Invite code: " + code)
-        print("Trying to join the server " + server['name'] + " now...")
+def joinServer(code):
+    server = client.getInfoFromInviteCode(code).json()['guild']
+    print("Invite code: " + code)
+    print("Trying to join the server " + server['name'] + " now...")
+    server_id = server['id']
+    if not server_id in scanned_servers:
         # The waiting time can be reduced, but the lower the time waited between joining servers, the higher the risk to get banned
-        client.joinGuild(code, wait=10)
+        client.joinGuild(code, wait=10) # TODO: check if joining was successful
         print("Joined the server successfully!")
         print("Scanning the newly joined server...")
         scanServer(server)
-        print("Scan successful")
+        print("Scan successful!\n")
+    else:
+        print("Already in this server! Continuing scan...\n")
 
 
 parser = argparse.ArgumentParser()
@@ -301,7 +312,8 @@ parser.add_argument("query", help="query to search on Discord to feed AIL")
 parser.add_argument("--verbose", help="verbose output", action="store_true")
 parser.add_argument("--nocache", help="disable cache", action="store_true")
 parser.add_argument("--messagelimit", help="maximum number of message to fetch", type=int, default=50) # TODO: replace hardcoded value with variable
+parser.add_argument("--replies", help="follow every message of a thread", action="store_true")
 args = parser.parse_args()
-# print(args)
+scanned_servers = []
 
 client.gateway.run(auto_reconnect=True)
