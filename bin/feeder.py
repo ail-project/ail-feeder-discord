@@ -15,15 +15,8 @@ import validators
 import sys
 import signal
 import newspaper
+import redis
 
-
-uuid = "48093b86-8ce5-415b-ac7d-8add427ec49c"
-ailfeedertype = "ail_feeder_discord"
-ailurlextract = "ail_feeder_urlextract"
-
-# config reader
-config = configparser.ConfigParser()
-config.read('../etc/ail-feeder-discord.cfg')
 
 t = open("etc/token.txt", "r").read()
 client = discum.Client(token=t, log={"console":False, "file":False})
@@ -41,7 +34,7 @@ def start(resp):
         print("Scanning the servers the user is on...\n")
         for server in servers:
             scanned_servers.append(server['id'])
-            print("Scanning '" + server['name'] + "' now...")
+            print("Scanning '" + server['name'] + "' now...\n")
             scanServer(server)
             print("Done scanning '" + server['name'] + "'\n")
         print("Done with the scan of existing servers!")
@@ -57,12 +50,15 @@ def start(resp):
         print("Done joining and scanning the given servers!\n")
 
         # TODO: This will be replaced with the continuous feed of messages check
-        print("All done! Exiting now...")
-        os._exit(0)
+        # print("All done! Exiting now...")
+        # os._exit(0)
     
     # Continuously check for new messages
-    #if resp.event.message:
-    #    m = resp.parsed.auto()
+    # TODO: check if this is async or sync to make sure to not lose any messages while scanning
+    if resp.event.message:
+        print("A NEW MESSAGE CAME IN!")
+        m = resp.parsed.auto()
+        print(json.dumps(m, indent=4))
 
 
 def scanServer(server):
@@ -73,7 +69,7 @@ def scanServer(server):
     channels = client.gateway.findVisibleChannels(server['id'], channel_types)
 
     for channel in channels:
-        messages = client.searchMessages(guildID= server['id'], textSearch=args.query).json()
+        messages = client.searchMessages(guildID= server['id'], textSearch=args.query, limit=args.messagelimit).json()
         # Get n messages from the channel
         # messages = client.getMessages(channel, 5).json()
         # print(json.dumps(messages, indent=4))
@@ -97,6 +93,13 @@ def scanServer(server):
 
 def createJson(message, server, channel):
     # TODO: Check if the message has already been analysed (caching)
+    # if r.exists("c:{}".format(message['id'])):
+    #     print("Tweet {} already processed".format(message['id']), file=sys.stderr)
+    #     if not args.nocache:
+    #         return
+    # else:
+    #     r.set("c:{}".format(message['id']), message['content'])
+    #     r.expire("c:{}".format(message['id']), cache_expire)
 
     output_message = {}
     
@@ -186,6 +189,7 @@ def createJson(message, server, channel):
     print("Found a message which matches the query!")
     print("The JSON of the message is:")
     print(json.dumps(output_message, indent=4, sort_keys=True))
+    print()
     # TODO: publish to AIL
 
 
@@ -234,6 +238,13 @@ def extractURLs(message):
             signal.alarm(0)
 
         # TODO: Check if the URL has already been analysed (caching)
+        # if r.exists("cu:{}".format(base64.b64encode(surl.encode()))):
+        #     print("URL {} already processed".format(surl), file=sys.stderr)
+        #     if not args.nocache:
+        #        continue
+        # else:
+        #     r.set("cu:{}".format(base64.b64encode(surl.encode())), message['content'])
+        #     r.expire("cu:{}".format(base64.b64encode(surl.encode())), cache_expire)
         
         try:
             article.download()
@@ -270,9 +281,9 @@ def extractURLs(message):
             print("Found a link!")
             print("The JSON of the extracted URL is:")
             print(json.dumps(output, indent=4, sort_keys=True))
-            
-            # TODO: publish to AIL
+            print()
 
+            # TODO: publish to AIL
             continue
     
         if nlpFailed:
@@ -288,6 +299,7 @@ def extractURLs(message):
         print("Found a link!")
         print("The JSON of the extracted URL is:")
         print(json.dumps(output, indent=4, sort_keys=True))
+        print()
         # TODO: publish to AIL
 
 
@@ -298,21 +310,49 @@ def joinServer(code):
     server_id = server['id']
     if not server_id in scanned_servers:
         # The waiting time can be reduced, but the lower the time waited between joining servers, the higher the risk to get banned
-        client.joinGuild(code, wait=10) # TODO: check if joining was successful
+        client.joinGuild(code, wait=10)
         print("Joined the server successfully!")
         print("Scanning the newly joined server...")
         scanServer(server)
-        print("Scan successful!\n")
+        print("Scan successful! Continuing the previous scan...\n")
     else:
         print("Already in this server! Continuing scan...\n")
 
+
+uuid = "48093b86-8ce5-415b-ac7d-8add427ec49c"
+ailfeedertype = "ail_feeder_discord"
+ailurlextract = "ail_feeder_urlextract"
+
+# config reader
+config = configparser.ConfigParser()
+config.read('../etc/ail-feeder-discord.cfg')
+
+if 'general' in config:
+    uuid = config['general']['uuid']
+    message_limit = config['general']['tweet_limit']
+else:
+    uuid = "aae656ec-ffff-4a21-acf0-c88d4e09d506"
+    message_limit = 50
+
+if 'redis' in config:
+    r = redis.Redis(host=config['redis']['host'], port=config['redis']['port'], db=config['redis']['db'])
+else:
+    r = redis.Redis(host='localhost', port=6379, db=0)
+
+
+if 'cache' in config:
+    cache_expire = config['cache']['expire']
+else:
+    cache_expire = 86400
 
 parser = argparse.ArgumentParser()
 parser.add_argument("query", help="query to search on Discord to feed AIL")
 parser.add_argument("--verbose", help="verbose output", action="store_true")
 parser.add_argument("--nocache", help="disable cache", action="store_true")
-parser.add_argument("--messagelimit", help="maximum number of message to fetch", type=int, default=50) # TODO: replace hardcoded value with variable
+parser.add_argument("--messagelimit", help="maximum number of message to fetch", type=int, default=message_limit)
 parser.add_argument("--replies", help="follow the messages of a thread", action="store_true")
+parser.add_argument("--maxsize", help="the maximum size of a url in bytes", type=int, default=4096) # TODO: find a good default value here
+parser.add_argument("--scantime", help="the amount of time the application should keep listening for new messages in seconds", type=int, default=600) # TODO: find a good default value here
 args = parser.parse_args()
 scanned_servers = []
 
