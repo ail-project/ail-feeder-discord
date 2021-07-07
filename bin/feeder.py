@@ -312,7 +312,7 @@ parser.add_argument("query", help="query to search on Discord to feed AIL")
 parser.add_argument("--verbose", help="verbose output", action="store_true")
 parser.add_argument("--nocache", help="disable cache", action="store_true")
 parser.add_argument("--messagelimit", help="maximum number of message to fetch", type=int, default=50) # TODO: replace hardcoded value with variable
-parser.add_argument("--replies", help="follow every message of a thread", action="store_true")
+parser.add_argument("--replies", help="follow the messages of a thread", action="store_true")
 args = parser.parse_args()
 scanned_servers = []
 

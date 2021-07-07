@@ -18,8 +18,8 @@ https://discord.com/developers/docs/intro
 3. Run the command below with the desired parameters and wait for execution to finish.
 
 ```
-ail-feeder-discord: python3 bin/feeder.py --help
-usage: feeder.py [-h] [--verbose] [--nocache] [--messagelimit MESSAGELIMIT] query
+ail-feeder-discord/: python3 bin/feeder.py -h
+usage: feeder.py [-h] [--verbose] [--nocache] [--messagelimit MESSAGELIMIT] [--replies] query
 
 positional arguments:
   query                 query to search on Discord to feed AIL
@@ -29,5 +29,6 @@ optional arguments:
   --verbose             verbose output
   --nocache             disable cache
   --messagelimit MESSAGELIMIT
-                        maximum number of messages to fetch
+                        maximum number of message to fetch
+  --replies             follow the messages of a thread
 ```
