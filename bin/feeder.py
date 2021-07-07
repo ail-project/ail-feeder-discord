@@ -167,12 +167,15 @@ def createJson(message, server, channel):
         output_message['meta']['referenced-message']['message-id'] = message['message_reference']['message_id']
         output_message['meta']['referenced-message']['url'] = "https://discord.com/channels/" + message['message_reference']['guild_id'] + "/" + message['message_reference']['channel_id'] + "/" + message['message_reference']['message_id']
         # TODO: Call the message analyser method recursively
+        referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
+        # print(json.dumps(referenced_message[0], indent=4))
+        createJson(referenced_message[0], server, channel)
 
     #Encoding the content of the message into base64
     content_bytes = message['content'].encode('utf-8')
     output_message['data-sha256'] = hashlib.sha256(content_bytes).hexdigest()
     output_message['data'] = base64.b64encode(content_bytes).decode('utf-8')
-    #output_message['message:content'] = message['content']
+    output_message['message:content'] = message['content'] # TODO: comment out this line
 
     print("The JSON of the message is:")
     print(json.dumps(output_message, indent=4, sort_keys=True))
@@ -237,7 +240,7 @@ def extractURLs(message):
         output['data-sha256'] = hashlib.sha256(content_bytes).hexdigest()
         output['data'] = base64.b64encode(content_bytes).decode('utf-8')
 
-        failed = False
+        nlpFailed = False
 
         # TODO: If nlp() fails, extract metadata instead
         try:
@@ -245,9 +248,9 @@ def extractURLs(message):
         except:
             if args.verbose:
                 print("Unable to nlp {}".format(surl), file=sys.stderr)
-            failed = True
+            nlpFailed = True
 
-            print("Extracting metadata instead.")
+            # print("Extracting metadata instead.")
             output['meta']['embedded-objects'] = []
             for embedded in message['embeds']:
                 e = {}
@@ -257,13 +260,14 @@ def extractURLs(message):
                         e[field] = embedded[field]
                 output['meta']['embedded-objects'].append(e)
 
+            print("The JSON of the extracted URL is:")
             print(json.dumps(output, indent=4, sort_keys=True))
             
             # TODO: publish to AIL
 
             continue
     
-        if failed:
+        if nlpFailed:
             continue
         
         output['meta']['newspaper:text'] = article.text
