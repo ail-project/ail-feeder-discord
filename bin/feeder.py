@@ -236,8 +236,8 @@ def extractURLs(message):
         content_bytes = article.html.encode('utf-8')
         output['data-sha256'] = hashlib.sha256(content_bytes).hexdigest()
         output['data'] = base64.b64encode(content_bytes).decode('utf-8')
-        output['meta']['newspaper:text'] = article.text
-        output['meta']['newspaper:authors'] = article.authors
+
+        failed = False
 
         # TODO: If nlp() fails, extract metadata instead
         try:
@@ -245,8 +245,29 @@ def extractURLs(message):
         except:
             if args.verbose:
                 print("Unable to nlp {}".format(surl), file=sys.stderr)
-            continue
+            failed = True
 
+            print("Extracting metadata instead.")
+            output['meta']['embedded-objects'] = []
+            for embedded in message['embeds']:
+                e = {}
+                fields = ['title', 'type', 'url', 'description', 'timestamp', 'footer', 'image', 'thumbnail', 'video', 'provider', 'author', 'fields']
+                for field in fields:
+                    if field in embedded:
+                        e[field] = embedded[field]
+                output['meta']['embedded-objects'].append(e)
+
+            print(json.dumps(output, indent=4, sort_keys=True))
+            
+            # TODO: publish to AIL
+
+            continue
+    
+        if failed:
+            continue
+        
+        output['meta']['newspaper:text'] = article.text
+        output['meta']['newspaper:authors'] = article.authors
         output['meta']['newspaper:keywords'] = article.keywords
         output['meta']['newspaper:publish_date'] = article.publish_date
         output['meta']['newspaper:top_image'] = article.top_image
