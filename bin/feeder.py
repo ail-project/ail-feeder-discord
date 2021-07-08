@@ -1,73 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import discum
-import simplejson as json
-import hashlib
-import base64
-import time
-import os
 import argparse
-from urlextract import URLExtract
+import base64
 import configparser
-from urllib.parse import urlparse
-import validators
-import sys
+import gzip
+import hashlib
+import math
+import os
+import re
 import signal
+import sys
+import time
+from threading import Timer
+from urllib.parse import urlparse
+
+import discum
 import newspaper
 import redis
-import gzip
-import re
-from threading import Timer
-import math
-
-
-t = open("etc/token.txt", "r").read()
-client = discum.Client(token=t, log={"console":False, "file":False})
-
-
-@client.gateway.command
-def start(resp):
-    # As soon as there is a response with the user being ready, the execution starts
-    if resp.event.ready_supplemental:
-        user = client.gateway.session.user
-        print("Logged in as {}#{}".format(user['username'], user['discriminator']))
-
-        # Scan the servers the user is already on
-        servers = client.getGuilds().json()
-        print("Scanning the servers the user is on...\n")
-        for server in servers:
-            scanned_servers.append(server['id'])
-            print("Scanning '" + server['name'] + "' now...\n")
-            scanServer(server)
-            print("Done scanning '" + server['name'] + "'\n")
-        print("Done with the scan of existing servers!")
-
-        print("Sleeping for 5 seconds to avoid rate limits...\n")
-        time.sleep(5)
-        
-        # Once we scanned all the servers the user is already on, we join the ones from server-invite-codes.txt and search those as well
-        print("Joining the servers from the server invite codes...\n")
-        codes = open("etc/server-invite-codes.txt", "r")
-        for code in codes:
-            joinServer(code)
-        print("Done joining and scanning the given servers!\n")
-
-        if args.scantime == 0:
-            print("All done! Exiting now...")
-            os._exit(0)
-        else:
-            print("Listening for new incoming messages now!\n")
-            Timer(args.scantime, stopProgram).start()
-    
-    # Continuously check for new messages
-    if resp.event.message:
-        print("A new message came in!\n")
-        m = resp.parsed.auto()
-        print(json.dumps(m, indent=4))
-        if re.search(args.query, m['content'], re.IGNORECASE):
-            createJson(m, m['guild_id'], "")
-        extractURLs(m)
+import simplejson as json
+import validators
+from urlextract import URLExtract
 
 
 def stopProgram():
@@ -75,21 +28,28 @@ def stopProgram():
     os._exit(0)
 
 
-def scanServer(server):
-    # Search through the text messages for the query
-    # TODO: fix the 25 message limit
-    result = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
+def getMessages(url, server):
+    if url:
+        result = client.searchMessages(guildID=server['id'], has="link").json()
+    else:
+        result = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
     total_messages = result['total_results']
     messages = []
     if args.messagelimit > 25 and total_messages > 25:
         iterations = math.ceil(total_messages/25)
         for i in range(iterations):
-            msgs = client.searchMessages(guildID=server['id'], textSearch=args.query, afterNumResults=i*25).json()
+            if url:
+                msgs = client.searchMessages(guildID=server['id'], has="link", afterNumResults=i*25).json()
+            else:
+                msgs = client.searchMessages(guildID=server['id'], textSearch=args.query, afterNumResults=i*25).json()
             for msg in msgs['messages']:
                 messages.append(msg[0])
 
     else:
-        msgs = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
+        if url:
+            msgs = client.searchMessages(guildID=server['id'], has="link").json()
+        else:
+            msgs = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
         if "messages" in msgs:
             if args.messagelimit < total_messages:
                 counter = 0
@@ -102,7 +62,13 @@ def scanServer(server):
             else:
                 for msg in msgs['messages']:
                     messages.append(msg[0])
+    
+    return messages
 
+
+def scanServer(server):
+    # Search through the text messages for the query
+    messages = getMessages(False, server)
     for message in messages:
         signal.alarm(10)
         try:
@@ -114,36 +80,13 @@ def scanServer(server):
             signal.alarm(0)
 
     # Search through the text messages for URLs
-    result = client.searchMessages(guildID=server['id'], has="link").json()
-    total_messages = result['total_results']
-    messages = []
-    if args.messagelimit > 25 and total_messages > 25:
-        iterations = math.ceil(total_messages/25)
-        for i in range(iterations):
-            msgs = client.searchMessages(guildID=server['id'], has="link", afterNumResults=i*25).json()
-            for msg in msgs['messages']:
-                messages.append(msg[0])
-    
-    else:
-        msgs = client.searchMessages(guildID=server['id'], has="link").json()
-        if "messages" in msgs:
-            if args.messagelimit < total_messages:
-                counter = 0
-                for msg in msgs['messages']:
-                    if counter < args.messagelimit:
-                        messages.append(msg[0])
-                        counter += 1
-                    else:
-                        break
-            else:
-                for msg in msgs['messages']:
-                    messages.append(msg[0])
-
+    messages = getMessages(True, server)
     for message in messages:
         extractURLs(message)
 
 
 def createJson(message, server_id, server_name):
+    # Caching
     if r.exists("c:{}".format(message['id'])):
         print("Message {} already processed".format(message['id']), file=sys.stderr)
         if not args.nocache:
@@ -228,7 +171,6 @@ def createJson(message, server_id, server_name):
 
         if (args.replies):
             referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
-            # print(json.dumps(referenced_message[0], indent=4))
             print("Following the message thread...\n")
             createJson(referenced_message[0], server_id, server_name)
 
@@ -237,7 +179,6 @@ def createJson(message, server_id, server_name):
     m.update(message['content'].encode('utf-8'))
     output_message['data-sha256'] = m.hexdigest()
     output_message['data'] = base64.b64encode(gzip.compress(message['content'].encode()))
-    # output_message['message:content'] = message['content']
 
     print("Found a message which matches the query!")
     print("The JSON of the message is:")
@@ -287,6 +228,7 @@ def extractURLs(message):
         else:
             signal.alarm(0)
 
+        # Caching
         if r.exists("cu:{}".format(base64.b64encode(surl.encode()))):
             print("URL {} already processed".format(surl), file=sys.stderr)
             if not args.nocache:
@@ -317,7 +259,6 @@ def extractURLs(message):
                 print("Unable to nlp {}".format(surl), file=sys.stderr)
             nlpFailed = True
 
-            # print("Extracting metadata instead.")
             output['meta']['embedded-objects'] = []
             for embedded in message['embeds']:
                 e = {}
@@ -336,6 +277,7 @@ def extractURLs(message):
                 print("The data from this URL is too big to upload! Consider increasing the maxsize if you still want it to be uploaded.")
                 print("Continuing with the next one...\n")
                 continue
+
             # TODO: publish to AIL
             continue
     
@@ -353,7 +295,6 @@ def extractURLs(message):
         print("The JSON of the extracted URL is:")
         print(json.dumps(output, indent=4, sort_keys=True))
         obj = json.dumps(output['data'], indent=4, sort_keys=True)
-        # print(len(obj))
         if (len(obj) > args.maxsize):
             print("The data from this URL is too big to upload! Consider increasing the maxsize if you still want it to be uploaded.")
             print("Continuing with the next one...\n")
@@ -378,11 +319,12 @@ def joinServer(code):
         print("Already in this server! Continuing scan...\n")
 
 
+# Information about the feeder
 uuid = "48093b86-8ce5-415b-ac7d-8add427ec49c"
 ailfeedertype = "ail_feeder_discord"
 ailurlextract = "ail_feeder_urlextract"
 
-# config reader
+# Config reader
 config = configparser.ConfigParser()
 config.read('../etc/ail-feeder-discord.cfg')
 
@@ -402,6 +344,7 @@ if 'cache' in config:
 else:
     cache_expire = 86400
 
+# Argument parsing
 parser = argparse.ArgumentParser()
 parser.add_argument("query", help="query to search on Discord to feed AIL")
 parser.add_argument("--verbose", help="verbose output", action="store_true")
@@ -411,6 +354,59 @@ parser.add_argument("--replies", help="follow the messages of a thread", action=
 parser.add_argument("--maxsize", help="the maximum size of a url in bytes", type=int, default=4194304) # 4MiB
 parser.add_argument("--scantime", help="the amount of time the application should keep listening for new messages in seconds (turned off by default)", type=int, default=0) # 0 means turned off
 args = parser.parse_args()
+
+# Initiate empty array to store scanned servers
 scanned_servers = []
 
+# Login and setup discum
+t = open("etc/token.txt", "r").read()
+client = discum.Client(token=t, log={"console":False, "file":False})
+
+# Start of the scan
+@client.gateway.command
+def start(resp):
+    # As soon as there is a response with the user being ready, the execution starts
+    if resp.event.ready_supplemental:
+        user = client.gateway.session.user
+        print("Logged in as {}#{}".format(user['username'], user['discriminator']))
+
+        # Scan the servers the user is already on
+        servers = client.getGuilds().json()
+        print("Scanning the servers the user is on...\n")
+        for server in servers:
+            scanned_servers.append(server['id'])
+            print("Scanning '" + server['name'] + "' now...\n")
+            scanServer(server)
+            print("Done scanning '" + server['name'] + "'\n")
+        print("Done with the scan of existing servers!")
+
+        print("Sleeping for 2 seconds to avoid rate limits...\n")
+        time.sleep(2)
+        
+        # Once we scanned all the servers the user is already on, we join the ones from server-invite-codes.txt and search those as well
+        print("Joining the servers from the server invite codes...\n")
+        codes = open("etc/server-invite-codes.txt", "r")
+        for code in codes:
+            joinServer(code)
+        print("Done joining and scanning the given servers!\n")
+
+        if args.scantime == 0:
+            print("All done! Exiting now...")
+            os._exit(0)
+        else:
+            print("Listening for new incoming messages now!\n")
+            # Set a timer for listening for new messages and stop execution once the time is up
+            Timer(args.scantime, stopProgram).start()
+    
+    # Continuously check for new messages
+    if resp.event.message:
+        print("A new message came in!\n")
+        m = resp.parsed.auto()
+        # Check if the query is in the message, if it is, extract the data
+        if re.search(args.query, m['content'], re.IGNORECASE):
+            createJson(m, m['guild_id'], "")
+        # Check if there is a URL in the message, if there is, extract the data
+        extractURLs(m)
+
+# Establish connection
 client.gateway.run(auto_reconnect=True)
