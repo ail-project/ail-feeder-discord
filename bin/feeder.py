@@ -19,6 +19,7 @@ import redis
 import gzip
 import re
 from threading import Timer
+import math
 
 
 t = open("etc/token.txt", "r").read()
@@ -65,7 +66,7 @@ def start(resp):
         m = resp.parsed.auto()
         print(json.dumps(m, indent=4))
         if re.search(args.query, m['content'], re.IGNORECASE):
-            createJson(m, m['guild_id'], "", m['channel_id'])
+            createJson(m, m['guild_id'], "")
         extractURLs(m)
 
 
@@ -75,44 +76,81 @@ def stopProgram():
 
 
 def scanServer(server):
-    # All possible channel types: 
-    # guild_text, dm, guild_voice, group_dm, guild_category, guild_news, guild_store, guild_news_thread, guild_public_thread, guild_private_thread, guild_stage_voice
-    # For now we only consider the text channels
-    channel_types = ['guild_text', 'dm', 'group_dm', 'guild_news', 'guild_store', 'guild_news_thread', 'guild_public_thread', 'guild_private_thread']
-    channels = client.gateway.findVisibleChannels(server['id'], channel_types)
+    # Search through the text messages for the query
+    # TODO: fix the 25 message limit
+    result = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
+    total_messages = result['total_results']
+    messages = []
+    if args.messagelimit > 25 and total_messages > 25:
+        iterations = math.ceil(total_messages/25)
+        for i in range(iterations):
+            msgs = client.searchMessages(guildID=server['id'], textSearch=args.query, afterNumResults=i*25).json()
+            for msg in msgs['messages']:
+                messages.append(msg[0])
 
-    for channel in channels:
-        messages = client.searchMessages(guildID= server['id'], textSearch=args.query, limit=args.messagelimit).json()
-        # Get n messages from the channel
-        # messages = client.getMessages(channel, 5).json()
-        # print(json.dumps(messages, indent=4))
-        if 'messages' in messages:
-            for message in messages['messages']:
-                signal.alarm(10)
-                try:
-                    createJson(message[0], server['id'], server['name'], channel)
-                except TimeoutError:
-                    print("Timeout reached for search in channel: {}".format(channel['name']), file=sys.stderr)
-                    sys.exit(1)
-                else:
-                    signal.alarm(0)
-        
-        messages = client.searchMessages(guildID=server['id'], has="link").json()
-        # print(json.dumps(messages, indent=4))
-        # print("Found " + str(messages['total_results']) + " messages with a URL")
-        for message in messages['messages']:
-            extractURLs(message[0])
+    else:
+        msgs = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
+        if "messages" in msgs:
+            if args.messagelimit < total_messages:
+                counter = 0
+                for msg in msgs['messages']:
+                    if counter < args.messagelimit:
+                        messages.append(msg[0])
+                        counter += 1
+                    else:
+                        break
+            else:
+                for msg in msgs['messages']:
+                    messages.append(msg[0])
+
+    for message in messages:
+        signal.alarm(10)
+        try:
+            createJson(message, server['id'], server['name'])
+        except TimeoutError:
+            print("Timeout reached for creating JSON of message: {}".format(message[0]['id']), file=sys.stderr)
+            sys.exit(1)
+        else:
+            signal.alarm(0)
+
+    # Search through the text messages for URLs
+    result = client.searchMessages(guildID=server['id'], has="link").json()
+    total_messages = result['total_results']
+    messages = []
+    if args.messagelimit > 25 and total_messages > 25:
+        iterations = math.ceil(total_messages/25)
+        for i in range(iterations):
+            msgs = client.searchMessages(guildID=server['id'], has="link", afterNumResults=i*25).json()
+            for msg in msgs['messages']:
+                messages.append(msg[0])
+    
+    else:
+        msgs = client.searchMessages(guildID=server['id'], has="link").json()
+        if "messages" in msgs:
+            if args.messagelimit < total_messages:
+                counter = 0
+                for msg in msgs['messages']:
+                    if counter < args.messagelimit:
+                        messages.append(msg[0])
+                        counter += 1
+                    else:
+                        break
+            else:
+                for msg in msgs['messages']:
+                    messages.append(msg[0])
+
+    for message in messages:
+        extractURLs(message)
 
 
-def createJson(message, server_id, server_name, channel):
-    # TODO: Check if the message has already been analysed (caching)
-    # if r.exists("c:{}".format(message['id'])):
-    #     print("Tweet {} already processed".format(message['id']), file=sys.stderr)
-    #     if not args.nocache:
-    #         return
-    # else:
-    #     r.set("c:{}".format(message['id']), message['content'])
-    #     r.expire("c:{}".format(message['id']), cache_expire)
+def createJson(message, server_id, server_name):
+    if r.exists("c:{}".format(message['id'])):
+        print("Message {} already processed".format(message['id']), file=sys.stderr)
+        if not args.nocache:
+            return
+    else:
+        r.set("c:{}".format(message['id']), message['content'])
+        r.expire("c:{}".format(message['id']), cache_expire)
 
     output_message = {}
     
@@ -122,7 +160,7 @@ def createJson(message, server_id, server_name, channel):
     
     output_message['meta'] = {}
     output_message['meta']['message:id'] = message['id']
-    output_message['meta']['message:url'] = "https://discord.com/channels/" + server_id + "/" + channel + "/" + message['id']
+    output_message['meta']['message:url'] = "https://discord.com/channels/" + server_id + "/" + message['channel_id'] + "/" + message['id']
 
     output_message['meta']['channel:id'] = message['channel_id']
     output_message['meta']['sender:id'] = message['author']['id']
@@ -158,11 +196,11 @@ def createJson(message, server_id, server_name, channel):
     output_message['meta']['reactions'] = []
     if 'reactions' in message:
         for reaction in message['reactions']:
-            r = {}
-            r['id'] = reaction['emoji']['id']
-            r['name'] = reaction['emoji']['name']
-            r['count'] = reaction['count']
-            output_message['meta']['reactions'].append(r)
+            react = {}
+            react['id'] = reaction['emoji']['id']
+            react['name'] = reaction['emoji']['name']
+            react['count'] = reaction['count']
+            output_message['meta']['reactions'].append(react)
 
     output_message['meta']['timestamp'] = message['timestamp']
     output_message['meta']['edited_timestamp'] = message['edited_timestamp']
@@ -192,7 +230,7 @@ def createJson(message, server_id, server_name, channel):
             referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
             # print(json.dumps(referenced_message[0], indent=4))
             print("Following the message thread...\n")
-            createJson(referenced_message[0], server_id, server_name, channel)
+            createJson(referenced_message[0], server_id, server_name)
 
     #Encoding the content of the message into base64
     m = hashlib.sha256()
@@ -211,9 +249,6 @@ def createJson(message, server_id, server_name, channel):
 def extractURLs(message):
     extractor = URLExtract()
     urls = extractor.find_urls(message['content'])
-    # print(message['content'])
-    # print("All extracted URLs from the message:")
-    # print(urls)
     for url in urls:
         output = {}
         output['source'] = ailurlextract
@@ -252,14 +287,13 @@ def extractURLs(message):
         else:
             signal.alarm(0)
 
-        # TODO: Check if the URL has already been analysed (caching)
-        # if r.exists("cu:{}".format(base64.b64encode(surl.encode()))):
-        #     print("URL {} already processed".format(surl), file=sys.stderr)
-        #     if not args.nocache:
-        #        continue
-        # else:
-        #     r.set("cu:{}".format(base64.b64encode(surl.encode())), message['content'])
-        #     r.expire("cu:{}".format(base64.b64encode(surl.encode())), cache_expire)
+        if r.exists("cu:{}".format(base64.b64encode(surl.encode()))):
+            print("URL {} already processed".format(surl), file=sys.stderr)
+            if not args.nocache:
+               continue
+        else:
+            r.set("cu:{}".format(base64.b64encode(surl.encode())), message['content'])
+            r.expire("cu:{}".format(base64.b64encode(surl.encode())), cache_expire)
         
         try:
             article.download()
@@ -361,7 +395,7 @@ else:
 if 'redis' in config:
     r = redis.Redis(host=config['redis']['host'], port=config['redis']['port'], db=config['redis']['db'])
 else:
-    r = redis.Redis(host='localhost', port=6379, db=0)
+    r = redis.Redis()
 
 if 'cache' in config:
     cache_expire = config['cache']['expire']
