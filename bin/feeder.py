@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import discum
-import json
+import simplejson as json
 import hashlib
 import base64
 import time
@@ -16,6 +16,9 @@ import sys
 import signal
 import newspaper
 import redis
+import gzip
+import re
+from threading import Timer
 
 
 t = open("etc/token.txt", "r").read()
@@ -49,16 +52,26 @@ def start(resp):
             joinServer(code)
         print("Done joining and scanning the given servers!\n")
 
-        # TODO: This will be replaced with the continuous feed of messages check
-        # print("All done! Exiting now...")
-        # os._exit(0)
+        if args.scantime == 0:
+            print("All done! Exiting now...")
+            os._exit(0)
+        else:
+            print("Listening for new incoming messages now!\n")
+            Timer(args.scantime, stopProgram).start()
     
     # Continuously check for new messages
-    # TODO: check if this is async or sync to make sure to not lose any messages while scanning
     if resp.event.message:
-        print("A NEW MESSAGE CAME IN!")
+        print("A new message came in!\n")
         m = resp.parsed.auto()
         print(json.dumps(m, indent=4))
+        if re.search(args.query, m['content'], re.IGNORECASE):
+            createJson(m, m['guild_id'], "", m['channel_id'])
+        extractURLs(m)
+
+
+def stopProgram():
+    print("The scanning time is up. Exiting now...")
+    os._exit(0)
 
 
 def scanServer(server):
@@ -77,7 +90,7 @@ def scanServer(server):
             for message in messages['messages']:
                 signal.alarm(10)
                 try:
-                    createJson(message[0], server, channel)
+                    createJson(message[0], server['id'], server['name'], channel)
                 except TimeoutError:
                     print("Timeout reached for search in channel: {}".format(channel['name']), file=sys.stderr)
                     sys.exit(1)
@@ -91,7 +104,7 @@ def scanServer(server):
             extractURLs(message[0])
 
 
-def createJson(message, server, channel):
+def createJson(message, server_id, server_name, channel):
     # TODO: Check if the message has already been analysed (caching)
     # if r.exists("c:{}".format(message['id'])):
     #     print("Tweet {} already processed".format(message['id']), file=sys.stderr)
@@ -109,13 +122,13 @@ def createJson(message, server, channel):
     
     output_message['meta'] = {}
     output_message['meta']['message:id'] = message['id']
-    output_message['meta']['message:url'] = "https://discord.com/channels/" + server['id'] + "/" + channel + "/" + message['id']
+    output_message['meta']['message:url'] = "https://discord.com/channels/" + server_id + "/" + channel + "/" + message['id']
 
     output_message['meta']['channel:id'] = message['channel_id']
     output_message['meta']['sender:id'] = message['author']['id']
     output_message['meta']['sender:profile'] = message['author']['username'] + "#" + message['author']['discriminator']
-    output_message['meta']['server:id'] = server['id']
-    output_message['meta']['server:name'] = server['name']
+    output_message['meta']['server:id'] = server_id
+    output_message['meta']['server:name'] = server_name
 
     output_message['meta']['attachments'] = []
     for attachment in message['attachments']:
@@ -132,13 +145,13 @@ def createJson(message, server, channel):
         m = {}
         m['id'] = mention['id']
         m['sender:profile'] = mention['username'] + "#" + mention['discriminator']
-        output_message['meta']['usermentions'].append(m)
+        output_message['meta']['mentions:user'].append(m)
 
     output_message['meta']['mentions:role'] = []
     for rolemention in message['mention_roles']:
         rm = {}
         rm['role:id'] = rolemention
-        output_message['meta']['rolementions'].append(rm)
+        output_message['meta']['mentions:role'].append(rm)
     
     output_message['meta']['mentions:everyone'] = message['mention_everyone']
 
@@ -178,12 +191,14 @@ def createJson(message, server, channel):
         if (args.replies):
             referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
             # print(json.dumps(referenced_message[0], indent=4))
-            createJson(referenced_message[0], server, channel)
+            print("Following the message thread...\n")
+            createJson(referenced_message[0], server_id, server_name, channel)
 
     #Encoding the content of the message into base64
-    content_bytes = message['content'].encode('utf-8')
-    output_message['data-sha256'] = hashlib.sha256(content_bytes).hexdigest()
-    output_message['data'] = base64.b64encode(content_bytes).decode('utf-8')
+    m = hashlib.sha256()
+    m.update(message['content'].encode('utf-8'))
+    output_message['data-sha256'] = m.hexdigest()
+    output_message['data'] = base64.b64encode(gzip.compress(message['content'].encode()))
     # output_message['message:content'] = message['content']
 
     print("Found a message which matches the query!")
@@ -254,11 +269,11 @@ def extractURLs(message):
                 print("Unable to download/parse {}".format(surl), file=sys.stderr)
             continue
 
-        #Encoding the URL of the message into base64
-        content_bytes = article.html.encode('utf-8')
-        output['data-sha256'] = hashlib.sha256(content_bytes).hexdigest()
-        output['data'] = base64.b64encode(content_bytes).decode('utf-8')
-
+        #Encoding the data of the URL into base64
+        m = hashlib.sha256()
+        m.update(article.html.encode('utf-8'))
+        output['data-sha256'] = m.hexdigest()
+        output['data'] = base64.b64encode(gzip.compress(article.html.encode()))
         nlpFailed = False
 
         try:
@@ -281,8 +296,12 @@ def extractURLs(message):
             print("Found a link!")
             print("The JSON of the extracted URL is:")
             print(json.dumps(output, indent=4, sort_keys=True))
-            print()
-
+            obj = json.dumps(output['data'], indent=4, sort_keys=True)
+            
+            if (len(obj) > args.maxsize):
+                print("The data from this URL is too big to upload! Consider increasing the maxsize if you still want it to be uploaded.")
+                print("Continuing with the next one...\n")
+                continue
             # TODO: publish to AIL
             continue
     
@@ -299,7 +318,13 @@ def extractURLs(message):
         print("Found a link!")
         print("The JSON of the extracted URL is:")
         print(json.dumps(output, indent=4, sort_keys=True))
-        print()
+        obj = json.dumps(output['data'], indent=4, sort_keys=True)
+        # print(len(obj))
+        if (len(obj) > args.maxsize):
+            print("The data from this URL is too big to upload! Consider increasing the maxsize if you still want it to be uploaded.")
+            print("Continuing with the next one...\n")
+            continue
+
         # TODO: publish to AIL
 
 
@@ -331,14 +356,12 @@ if 'general' in config:
     uuid = config['general']['uuid']
     message_limit = config['general']['tweet_limit']
 else:
-    uuid = "aae656ec-ffff-4a21-acf0-c88d4e09d506"
     message_limit = 50
 
 if 'redis' in config:
     r = redis.Redis(host=config['redis']['host'], port=config['redis']['port'], db=config['redis']['db'])
 else:
     r = redis.Redis(host='localhost', port=6379, db=0)
-
 
 if 'cache' in config:
     cache_expire = config['cache']['expire']
@@ -349,10 +372,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("query", help="query to search on Discord to feed AIL")
 parser.add_argument("--verbose", help="verbose output", action="store_true")
 parser.add_argument("--nocache", help="disable cache", action="store_true")
-parser.add_argument("--messagelimit", help="maximum number of message to fetch", type=int, default=message_limit)
+parser.add_argument("--messagelimit", help="maximum number of messages to fetch", type=int, default=message_limit)
 parser.add_argument("--replies", help="follow the messages of a thread", action="store_true")
-parser.add_argument("--maxsize", help="the maximum size of a url in bytes", type=int, default=4096) # TODO: find a good default value here
-parser.add_argument("--scantime", help="the amount of time the application should keep listening for new messages in seconds", type=int, default=600) # TODO: find a good default value here
+parser.add_argument("--maxsize", help="the maximum size of a url in bytes", type=int, default=4194304) # 4MiB
+parser.add_argument("--scantime", help="the amount of time the application should keep listening for new messages in seconds (turned off by default)", type=int, default=0) # 0 means turned off
 args = parser.parse_args()
 scanned_servers = []
 
