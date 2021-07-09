@@ -1,0 +1,7 @@
+discum
+newspaper3k
+redis
+simplejson
+validators
+urlextract
+pyail

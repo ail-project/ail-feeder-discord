@@ -4,8 +4,6 @@
 import argparse
 import base64
 import configparser
-import gzip
-import hashlib
 import math
 import os
 import re
@@ -19,7 +17,6 @@ import discum
 import newspaper
 import redis
 import simplejson as json
-import urlextract
 import validators
 from urlextract import URLExtract
 from pyail import PyAIL
