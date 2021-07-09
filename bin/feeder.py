@@ -182,18 +182,12 @@ def createJson(message, server_id, server_name):
             createJson(referenced_message[0], server_id, server_name)
 
     output_message['data'] = message['content']
-    #Encoding the content of the message into base64
-    # m = hashlib.sha256()
-    # m.update(message['content'].encode('utf-8'))
-    # output_message['data-sha256'] = m.hexdigest()
-    # output_message['data'] = base64.b64encode(gzip.compress(message['content'].encode()))
 
     if (args.verbose):
         print("Found a message which matches the query!")
         print("The JSON of the message is:")
     print(json.dumps(output_message, indent=4, sort_keys=True))
 
-    # TODO: publish to AIL
     if args.verbose:
         print("Uploading the message to AIL...\n")
     data = output_message['data']
@@ -264,11 +258,7 @@ def extractURLs(message):
             continue
 
         output['data'] = article.html
-        # Encoding the data of the URL into base64
-        # m = hashlib.sha256()
-        # m.update(article.html.encode('utf-8'))
-        # output['data-sha256'] = m.hexdigest()
-        # output['data'] = base64.b64encode(gzip.compress(article.html.encode()))
+
         nlpFailed = False
 
         try:
@@ -299,7 +289,6 @@ def extractURLs(message):
                     print("Continuing with the next one...\n")
                 continue
 
-            # TODO: publish to AIL
             if args.verbose:
                 print("Uploading the URL to AIL...\n")
             data = output['data']
@@ -330,7 +319,6 @@ def extractURLs(message):
                 print("Continuing with the next one...\n")
             continue
 
-        # TODO: publish to AIL
         if args.verbose:
             print("Uploading the URL to AIL...\n")
         data = output['data']
