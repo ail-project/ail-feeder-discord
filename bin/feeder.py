@@ -19,8 +19,10 @@ import discum
 import newspaper
 import redis
 import simplejson as json
+import urlextract
 import validators
 from urlextract import URLExtract
+from pyail import PyAIL
 
 
 def stopProgram():
@@ -179,11 +181,12 @@ def createJson(message, server_id, server_name):
                 print("Following the message thread...\n")
             createJson(referenced_message[0], server_id, server_name)
 
+    output_message['data'] = message['content']
     #Encoding the content of the message into base64
-    m = hashlib.sha256()
-    m.update(message['content'].encode('utf-8'))
-    output_message['data-sha256'] = m.hexdigest()
-    output_message['data'] = base64.b64encode(gzip.compress(message['content'].encode()))
+    # m = hashlib.sha256()
+    # m.update(message['content'].encode('utf-8'))
+    # output_message['data-sha256'] = m.hexdigest()
+    # output_message['data'] = base64.b64encode(gzip.compress(message['content'].encode()))
 
     if (args.verbose):
         print("Found a message which matches the query!")
@@ -191,6 +194,14 @@ def createJson(message, server_id, server_name):
     print(json.dumps(output_message, indent=4, sort_keys=True))
 
     # TODO: publish to AIL
+    if args.verbose:
+        print("Uploading the message to AIL...\n")
+    data = output_message['data']
+    metadata = output_message['meta']
+    source = ailfeedertype
+    source_uuid = uuid
+
+    pyail.feed_json_item(data, metadata, source, source_uuid)
 
 
 def extractURLs(message):
@@ -252,11 +263,12 @@ def extractURLs(message):
                 print("Unable to download/parse {}".format(surl), file=sys.stderr)
             continue
 
-        #Encoding the data of the URL into base64
-        m = hashlib.sha256()
-        m.update(article.html.encode('utf-8'))
-        output['data-sha256'] = m.hexdigest()
-        output['data'] = base64.b64encode(gzip.compress(article.html.encode()))
+        output['data'] = article.html
+        # Encoding the data of the URL into base64
+        # m = hashlib.sha256()
+        # m.update(article.html.encode('utf-8'))
+        # output['data-sha256'] = m.hexdigest()
+        # output['data'] = base64.b64encode(gzip.compress(article.html.encode()))
         nlpFailed = False
 
         try:
@@ -288,6 +300,13 @@ def extractURLs(message):
                 continue
 
             # TODO: publish to AIL
+            if args.verbose:
+                print("Uploading the URL to AIL...\n")
+            data = output['data']
+            metadata = output['meta']
+            source = ailurlextract
+            source_uuid = uuid
+            pyail.feed_json_item(data, metadata, source, source_uuid)
             continue
     
         if nlpFailed:
@@ -312,6 +331,13 @@ def extractURLs(message):
             continue
 
         # TODO: publish to AIL
+        if args.verbose:
+            print("Uploading the URL to AIL...\n")
+        data = output['data']
+        metadata = output['meta']
+        source = ailurlextract
+        source_uuid = uuid
+        pyail.feed_json_item(data, metadata, source, source_uuid)
 
 
 def joinServer(code):
@@ -358,6 +384,14 @@ if 'cache' in config:
     cache_expire = config['cache']['expire']
 else:
     cache_expire = 86400
+
+ail_url = config['ail']['url']
+ail_key = config['ail']['apikey']
+try:
+    pyail = PyAIL(ail_url, ail_key, ssl=False)
+except Exception as e:
+    print(e)
+    sys.exit(0)
 
 # Argument parsing
 parser = argparse.ArgumentParser()
