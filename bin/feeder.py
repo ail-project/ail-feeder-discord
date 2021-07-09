@@ -367,11 +367,11 @@ ailurlextract = "ail_feeder_urlextract"
 
 # Config reader
 config = configparser.ConfigParser()
-config.read('../etc/ail-feeder-discord.cfg')
+config.read('etc/ail-feeder-discord.cfg')
 
 if 'general' in config:
     uuid = config['general']['uuid']
-    message_limit = config['general']['tweet_limit']
+    message_limit = config['general']['message_limit']
 else:
     message_limit = 50
 
@@ -385,8 +385,12 @@ if 'cache' in config:
 else:
     cache_expire = 86400
 
-ail_url = config['ail']['url']
-ail_key = config['ail']['apikey']
+if 'ail' in config:
+    ail_url = config['ail']['url']
+    ail_key = config['ail']['apikey']
+else:
+    print("Ail section not found in the config file. Add it and the necessary fields and try again!", sys.stderr)
+    sys.exit(0)
 try:
     pyail = PyAIL(ail_url, ail_key, ssl=False)
 except Exception as e:
