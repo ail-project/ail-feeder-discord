@@ -18,12 +18,12 @@ import newspaper
 import redis
 import simplejson as json
 import validators
-from urlextract import URLExtract
 from pyail import PyAIL
+from urlextract import URLExtract
 
 
 def stopProgram():
-    if (args.verbose):
+    if args.verbose:
         print("The scanning time is up. Exiting now...")
     os._exit(0)
 
@@ -33,6 +33,7 @@ def getMessages(url, server):
         result = client.searchMessages(guildID=server['id'], has="link").json()
     else:
         result = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
+    
     total_messages = result['total_results']
     messages = []
 
@@ -43,6 +44,7 @@ def getMessages(url, server):
                 msgs = client.searchMessages(guildID=server['id'], has="link", afterNumResults=i*25).json()
             else:
                 msgs = client.searchMessages(guildID=server['id'], textSearch=args.query, afterNumResults=i*25).json()
+
             for msg in msgs['messages']:
                 messages.append(msg[0])
 
@@ -51,6 +53,7 @@ def getMessages(url, server):
             msgs = client.searchMessages(guildID=server['id'], has="link").json()
         else:
             msgs = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
+
         if "messages" in msgs:
             if args.messagelimit < total_messages:
                 counter = 0
@@ -75,7 +78,8 @@ def scanServer(server):
         try:
             createJson(message, server['id'], server['name'])
         except TimeoutError:
-            print("Timeout reached for creating JSON of message: {}".format(message[0]['id']), file=sys.stderr)
+            if args.verbose:
+                print("Timeout reached for creating JSON of message: {}".format(message[0]['id']), file=sys.stderr)
             sys.exit(1)
         else:
             signal.alarm(0)
@@ -89,7 +93,8 @@ def scanServer(server):
 def createJson(message, server_id, server_name):
     # Caching
     if r.exists("c:{}".format(message['id'])):
-        print("Message {} already processed".format(message['id']), file=sys.stderr)
+        if args.verbose:
+            print("Message {} already processed".format(message['id']), file=sys.stderr)
         if not args.nocache:
             return
     else:
@@ -165,28 +170,29 @@ def createJson(message, server_id, server_name):
 
     if 'message_reference' in message:
         output_message['meta']['referenced-message'] = {}
-        output_message['meta']['referenced-message']['guild-id'] = message['message_reference']['guild_id']
+        if 'guild_id' in message['message_reference']:
+            output_message['meta']['referenced-message']['guild-id'] = message['message_reference']['guild_id']
+        else:
+            output_message['meta']['referenced-message']['guild-id'] = ''
         output_message['meta']['referenced-message']['channel-id'] = message['message_reference']['channel_id']
         output_message['meta']['referenced-message']['message-id'] = message['message_reference']['message_id']
-        output_message['meta']['referenced-message']['url'] = "https://discord.com/channels/" + message['message_reference']['guild_id'] + "/" + message['message_reference']['channel_id'] + "/" + message['message_reference']['message_id']
 
-        if (args.replies):
+        if args.replies:
             # Avoid being ratelimited
             time.sleep(1)
             referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
-            if (args.verbose):
+            if args.verbose:
                 print("Following the message thread...\n")
             createJson(referenced_message[0], server_id, server_name)
 
     output_message['data'] = message['content']
 
-    if (args.verbose):
+    if args.verbose:
         print("Found a message which matches the query!")
         print("The JSON of the message is:")
-    print(json.dumps(output_message, indent=4, sort_keys=True))
-
-    if args.verbose:
+        print(json.dumps(output_message, indent=4, sort_keys=True))
         print("Uploading the message to AIL...\n")
+
     data = output_message['data']
     metadata = output_message['meta']
     source = ailfeedertype
@@ -213,13 +219,18 @@ def extractURLs(message):
 
         if u.hostname is not None:
             if "discord.gg" in u.hostname:
-                if (args.verbose):
+                if args.verbose:
                     print("Found an invite link!")
                 code = u.path.replace("/", "")
                 joinServer(code)
                 continue
             elif "discord.com" in u.hostname:
-                continue
+                if "invite" in u.path:
+                    code = u.path.split("/")[-1]
+                    joinServer(code)
+                    continue
+                else:
+                    continue
 
         # If the url is not valid, drop it and continue
         if not validators.url(surl):
@@ -229,14 +240,16 @@ def extractURLs(message):
         try:
             article = newspaper.Article(surl)
         except TimeoutError:
-            print("Timeout reached for {}".format(surl), file=sys.stderr)
+            if args.verbose:
+                print("Timeout reached for {}".format(surl), file=sys.stderr)
             continue
         else:
             signal.alarm(0)
 
         # Caching
         if r.exists("cu:{}".format(base64.b64encode(surl.encode()))):
-            print("URL {} already processed".format(surl), file=sys.stderr)
+            if args.verbose:
+                print("URL {} already processed".format(surl), file=sys.stderr)
             if not args.nocache:
                continue
         else:
@@ -274,14 +287,14 @@ def extractURLs(message):
                         e[field] = embedded[field]
                 output['meta']['embedded-objects'].append(e)
 
-            if (args.verbose):
+            if args.verbose:
                 print("Found a link!")
                 print("The JSON of the extracted URL is:")
-            print(json.dumps(output, indent=4, sort_keys=True))
+                print(json.dumps(output, indent=4, sort_keys=True))
             obj = json.dumps(output['data'], indent=4, sort_keys=True)
             
-            if (len(obj) > args.maxsize):
-                if (args.verbose):
+            if len(obj) > args.maxsize:
+                if args.verbose:
                     print("The data from this URL is too big to upload! Consider increasing the maxsize if you still want it to be uploaded.")
                     print("Continuing with the next one...\n")
                 continue
@@ -305,13 +318,13 @@ def extractURLs(message):
         output['meta']['newspaper:top_image'] = article.top_image
         output['meta']['newspaper:movies'] = article.movies
 
-        if (args.verbose):
+        if args.verbose:
             print("Found a link!")
             print("The JSON of the extracted URL is:")
-        print(json.dumps(output, indent=4, sort_keys=True))
+            print(json.dumps(output, indent=4, sort_keys=True))
         obj = json.dumps(output['data'], indent=4, sort_keys=True)
-        if (len(obj) > args.maxsize):
-            if (args.verbose):
+        if len(obj) > args.maxsize:
+            if args.verbose:
                 print("The data from this URL is too big to upload! Consider increasing the maxsize if you still want it to be uploaded.")
                 print("Continuing with the next one...\n")
             continue
@@ -326,22 +339,28 @@ def extractURLs(message):
 
 
 def joinServer(code):
-    server = client.getInfoFromInviteCode(code).json()['guild']
-    if (args.verbose):
+    response = client.getInfoFromInviteCode(code).json()
+    if 'message' in response and "Unknown Invite" == response['message']:
+        if args.verbose:
+            print("Invalid invite code, skipping...\n")
+        return
+    
+    server = response['guild']
+    if args.verbose:
         print("Invite code: {}".format(code))
         print("Trying to join the server {} now...".format(server['name']))
     server_id = server['id']
     if not server_id in scanned_servers:
         # The waiting time can be reduced, but the lower the time waited between joining servers, the higher the risk to get banned
         client.joinGuild(code, wait=10)
-        if (args.verbose):
+        if args.verbose:
             print("Joined the server successfully!")
             print("Scanning the newly joined server...")
         scanServer(server)
-        if (args.verbose):
+        if args.verbose:
             print("Scan successful! Continuing the previous scan...\n")
     else:
-        if (args.verbose):
+        if args.verbose:
             print("Already in this server! Continuing scan...\n")
 
 
@@ -406,46 +425,48 @@ def start(resp):
     # As soon as there is a response with the user being ready, the execution starts
     if resp.event.ready_supplemental:
         user = client.gateway.session.user
-        print("Logged in as {}#{}".format(user['username'], user['discriminator']))
+        if args.verbose:
+            print("Logged in as {}#{}".format(user['username'], user['discriminator']))
 
         # Scan the servers the user is already on
         servers = client.getGuilds().json()
-        if (args.verbose):
+        if args.verbose:
             print("Scanning the servers the user is on...\n")
         for server in servers:
             scanned_servers.append(server['id'])
-            if (args.verbose):
+            if args.verbose:
                 print("Scanning '{}' now...\n".format(server['name']))
             scanServer(server)
-            if (args.verbose):
+            if args.verbose:
                 print("Done scanning '{}'\n".format(server['name']))
         
-        if (args.verbose):
+        if args.verbose:
             print("Done with the scan of existing servers!")
             print("Sleeping for 2 seconds to avoid rate limits...\n")
         time.sleep(2)
         
         # Once we scanned all the servers the user is already on, we join the ones from server-invite-codes.txt and search those as well
-        if (args.verbose):
+        if args.verbose:
             print("Joining the servers from the server invite codes...\n")
         codes = open("etc/server-invite-codes.txt", "r")
         for code in codes:
             joinServer(code)
-        if (args.verbose):
+        if args.verbose:
             print("Done joining and scanning the given servers!\n")
 
         if args.scantime == 0:
-            print("All done! Exiting now...")
+            if args.verbose:
+                print("All done! Exiting now...")
             os._exit(0)
         else:
-            if (args.verbose):
+            if args.verbose:
                 print("Listening for new incoming messages now!\n")
             # Set a timer for listening for new messages and stop execution once the time is up
             Timer(args.scantime, stopProgram).start()
     
     # Continuously check for new messages
     if resp.event.message:
-        if (args.verbose):
+        if args.verbose:
             print("A new message came in!\n")
         m = resp.parsed.auto()
         # Check if the query is in the message, if it is, extract the data
