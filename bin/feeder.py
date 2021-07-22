@@ -29,24 +29,38 @@ def stopProgram():
 
 
 def getMessages(url, server):
+    time.sleep(10)
+
+    if args.verbose:
+        print("Getting the amount of messages that match...")
+
     if url:
         result = client.searchMessages(guildID=server['id'], has="link").json()
     else:
         result = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
     
+    time.sleep(10)
     total_messages = result['total_results']
+    if args.verbose:
+        print("Found {} messages!".format(total_messages))
     messages = []
 
     if args.messagelimit > 25 and total_messages > 25:
-        iterations = math.ceil(total_messages/25)
+        iterations = math.ceil(args.messagelimit/25)
         for i in range(iterations):
+            time.sleep(10)
             if url:
                 msgs = client.searchMessages(guildID=server['id'], has="link", afterNumResults=i*25).json()
             else:
                 msgs = client.searchMessages(guildID=server['id'], textSearch=args.query, afterNumResults=i*25).json()
-
-            for msg in msgs['messages']:
-                messages.append(msg[0])
+            if "messages" in msgs:
+                for msg in msgs['messages']:
+                    messages.append(msg[0])
+            else:
+                if args.verbose:
+                    print(msgs)
+                    print("Rate limited! Cancelling scan!")
+                os._exit(0)
 
     else:
         if url:
@@ -66,13 +80,27 @@ def getMessages(url, server):
             else:
                 for msg in msgs['messages']:
                     messages.append(msg[0])
+        else:
+            if args.verbose:
+                print(msgs)
+                print("Rate limited! Cancelling scan!")
+            os._exit(0)
+
     
+    if args.verbose:
+        print("Done scanning for messages!\n")
     return messages
 
 
 def scanServer(server):
     # Search through the text messages for the query
+    if args.verbose:
+        print("Scanning for the query in messages...")
     messages = getMessages(False, server)
+    
+    if args.verbose:
+        print("Looping through the found messages and extracting data...")
+    
     for message in messages:
         signal.alarm(10)
         try:
@@ -84,10 +112,19 @@ def scanServer(server):
         else:
             signal.alarm(0)
 
+    if args.verbose:
+        print("Done looping through the found messages!\n")
+
     # Search through the text messages for URLs
+    if args.verbose:
+        print("Scanning for URLs in messages...")
     messages = getMessages(True, server)
+    if args.verbose:
+        print("Looping through the found messages and extracting data...")
     for message in messages:
         extractURLs(message)
+    if args.verbose:
+        print("Done looping through the found messages!\n")
 
 
 def createJson(message, server_id, server_name):
@@ -179,9 +216,12 @@ def createJson(message, server_id, server_name):
 
         if args.replies:
             # Avoid being ratelimited
-            time.sleep(1)
+            if args.verbose:
+                print("Getting the referenced-message and extracting it's data...")
+            time.sleep(10)
             referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
             if args.verbose:
+                print(referenced_message)
                 print("Following the message thread...\n")
             createJson(referenced_message[0], server_id, server_name)
 
@@ -339,6 +379,9 @@ def extractURLs(message):
 
 
 def joinServer(code):
+    if args.verbose:
+        print("Getting info from invite code...")
+    time.sleep(10)
     response = client.getInfoFromInviteCode(code).json()
     if 'message' in response and "Unknown Invite" == response['message']:
         if args.verbose:
@@ -406,7 +449,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("query", help="query to search on Discord to feed AIL")
 parser.add_argument("--verbose", help="verbose output", action="store_true")
 parser.add_argument("--nocache", help="disable cache", action="store_true")
-parser.add_argument("--messagelimit", help="maximum number of messages to fetch", type=int, default=message_limit)
+parser.add_argument("--messagelimit", help="maximum number of messages to fetch (multiples of 25)", type=int, default=message_limit)
 parser.add_argument("--replies", help="follow the messages of a thread", action="store_true")
 parser.add_argument("--maxsize", help="the maximum size of a url in bytes", type=int, default=4194304) # 4MiB
 parser.add_argument("--scantime", help="the amount of time the application should keep listening for new messages in seconds (turned off by default)", type=int, default=0) # 0 means turned off
@@ -429,9 +472,10 @@ def start(resp):
             print("Logged in as {}#{}".format(user['username'], user['discriminator']))
 
         # Scan the servers the user is already on
-        servers = client.getGuilds().json()
         if args.verbose:
             print("Scanning the servers the user is on...\n")
+        servers = client.getGuilds().json()
+        time.sleep(10)
         for server in servers:
             scanned_servers.append(server['id'])
             if args.verbose:
@@ -442,8 +486,8 @@ def start(resp):
         
         if args.verbose:
             print("Done with the scan of existing servers!")
-            print("Sleeping for 2 seconds to avoid rate limits...\n")
-        time.sleep(2)
+            print("Sleeping for 5 seconds to avoid rate limits...\n")
+        time.sleep(10)
         
         # Once we scanned all the servers the user is already on, we join the ones from server-invite-codes.txt and search those as well
         if args.verbose:
@@ -451,6 +495,7 @@ def start(resp):
         codes = open("etc/server-invite-codes.txt", "r")
         for code in codes:
             joinServer(code)
+        codes.close()
         if args.verbose:
             print("Done joining and scanning the given servers!\n")
 
