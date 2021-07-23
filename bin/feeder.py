@@ -6,6 +6,7 @@ import base64
 import configparser
 import math
 import os
+import random
 import re
 import signal
 import sys
@@ -29,7 +30,7 @@ def stopProgram():
 
 
 def getMessages(url, server):
-    time.sleep(5)
+    time.sleep(round(random.uniform(5, 7), 2))
 
     if args.verbose:
         print("Getting the amount of messages that match...")
@@ -39,7 +40,7 @@ def getMessages(url, server):
     else:
         result = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
     
-    time.sleep(5)
+    time.sleep(round(random.uniform(5, 7), 2))
     total_messages = result['total_results']
     if args.verbose:
         print("Found {} messages!".format(total_messages))
@@ -53,7 +54,7 @@ def getMessages(url, server):
         iterations = math.ceil(args.messagelimit/25)
         for i in range(iterations):
             print("Getting messages {} to {}...".format(i*25+1, (i+1)*25))
-            time.sleep(7)
+            time.sleep(round(random.uniform(7, 10), 2))
             if url:
                 msgs = client.searchMessages(guildID=server['id'], has="link", afterNumResults=i*25).json()
             else:
@@ -223,7 +224,7 @@ def createJson(message, server_id, server_name):
             # Avoid being ratelimited
             if args.verbose:
                 print("Getting the referenced-message and extracting it's data...")
-            time.sleep(5)
+            time.sleep(round(random.uniform(5, 7), 2))
             referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
             if args.verbose:
                 print(referenced_message)
@@ -386,7 +387,7 @@ def extractURLs(message):
 def joinServer(code):
     if args.verbose:
         print("Getting info from invite code...")
-    time.sleep(5)
+    time.sleep(round(random.uniform(5, 7), 2))
     response = client.getInfoFromInviteCode(code).json()
     if 'message' in response and "Unknown Invite" == response['message']:
         if args.verbose:
@@ -399,9 +400,9 @@ def joinServer(code):
         print("Trying to join the server {} now...".format(server['name']))
     server_id = server['id']
     if not server_id in scanned_servers:
-        time.sleep(5)
+        time.sleep(round(random.uniform(5, 7), 2))
         # The waiting time can be reduced, but the lower the time waited between joining servers, the higher the risk to get banned
-        client.joinGuild(code, wait=7)
+        client.joinGuild(code, wait=random.randint(7, 10))
         if args.verbose:
             print("Joined the server successfully!")
             print("Scanning the newly joined server...")
@@ -481,7 +482,7 @@ def start(resp):
         if args.verbose:
             print("Scanning the servers the user is on...\n")
         servers = client.getGuilds().json()
-        time.sleep(5)
+        time.sleep(round(random.uniform(5, 7), 2))
         for server in servers:
             scanned_servers.append(server['id'])
             if args.verbose:
@@ -492,8 +493,7 @@ def start(resp):
         
         if args.verbose:
             print("Done with the scan of existing servers!")
-            print("Sleeping for 5 seconds to avoid rate limits...\n")
-        time.sleep(5)
+        time.sleep(round(random.uniform(5, 7), 2))
         
         # Once we scanned all the servers the user is already on, we join the ones from server-invite-codes.txt and search those as well
         if args.verbose:
