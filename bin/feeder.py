@@ -29,7 +29,7 @@ def stopProgram():
 
 
 def getMessages(url, server):
-    time.sleep(10)
+    time.sleep(5)
 
     if args.verbose:
         print("Getting the amount of messages that match...")
@@ -39,16 +39,21 @@ def getMessages(url, server):
     else:
         result = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
     
-    time.sleep(10)
+    time.sleep(5)
     total_messages = result['total_results']
     if args.verbose:
         print("Found {} messages!".format(total_messages))
     messages = []
+    if total_messages > 5000:
+        total_messages = 5000 # 5000 messages is the maximum Discord can fetch {'code': 50035, 'errors': {'offset': {'_errors': [{'code': 'NUMBER_TYPE_MAX', 'message': 'int value should be less than or equal to 5000.'}]}}, 'message': 'Invalid Form Body'}
+    if args.messagelimit == -1:
+        args.messagelimit = total_messages
 
     if args.messagelimit > 25 and total_messages > 25:
         iterations = math.ceil(args.messagelimit/25)
         for i in range(iterations):
-            time.sleep(10)
+            print("Getting messages {} to {}...".format(i*25+1, (i+1)*25))
+            time.sleep(7)
             if url:
                 msgs = client.searchMessages(guildID=server['id'], has="link", afterNumResults=i*25).json()
             else:
@@ -218,7 +223,7 @@ def createJson(message, server_id, server_name):
             # Avoid being ratelimited
             if args.verbose:
                 print("Getting the referenced-message and extracting it's data...")
-            time.sleep(10)
+            time.sleep(5)
             referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
             if args.verbose:
                 print(referenced_message)
@@ -381,7 +386,7 @@ def extractURLs(message):
 def joinServer(code):
     if args.verbose:
         print("Getting info from invite code...")
-    time.sleep(10)
+    time.sleep(5)
     response = client.getInfoFromInviteCode(code).json()
     if 'message' in response and "Unknown Invite" == response['message']:
         if args.verbose:
@@ -394,8 +399,9 @@ def joinServer(code):
         print("Trying to join the server {} now...".format(server['name']))
     server_id = server['id']
     if not server_id in scanned_servers:
+        time.sleep(5)
         # The waiting time can be reduced, but the lower the time waited between joining servers, the higher the risk to get banned
-        client.joinGuild(code, wait=10)
+        client.joinGuild(code, wait=7)
         if args.verbose:
             print("Joined the server successfully!")
             print("Scanning the newly joined server...")
@@ -449,7 +455,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("query", help="query to search on Discord to feed AIL")
 parser.add_argument("--verbose", help="verbose output", action="store_true")
 parser.add_argument("--nocache", help="disable cache", action="store_true")
-parser.add_argument("--messagelimit", help="maximum number of messages to fetch (multiples of 25)", type=int, default=message_limit)
+parser.add_argument("--messagelimit", help="maximum number of messages to fetch (multiples of 25) (-1 to get all)", type=int, default=message_limit)
 parser.add_argument("--replies", help="follow the messages of a thread", action="store_true")
 parser.add_argument("--maxsize", help="the maximum size of a url in bytes", type=int, default=4194304) # 4MiB
 parser.add_argument("--scantime", help="the amount of time the application should keep listening for new messages in seconds (turned off by default)", type=int, default=0) # 0 means turned off
@@ -475,7 +481,7 @@ def start(resp):
         if args.verbose:
             print("Scanning the servers the user is on...\n")
         servers = client.getGuilds().json()
-        time.sleep(10)
+        time.sleep(5)
         for server in servers:
             scanned_servers.append(server['id'])
             if args.verbose:
@@ -487,7 +493,7 @@ def start(resp):
         if args.verbose:
             print("Done with the scan of existing servers!")
             print("Sleeping for 5 seconds to avoid rate limits...\n")
-        time.sleep(10)
+        time.sleep(5)
         
         # Once we scanned all the servers the user is already on, we join the ones from server-invite-codes.txt and search those as well
         if args.verbose:
