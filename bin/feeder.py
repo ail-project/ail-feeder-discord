@@ -41,6 +41,10 @@ def getMessages(url, server):
         result = client.searchMessages(guildID=server['id'], textSearch=args.query).json()
     
     time.sleep(round(random.uniform(5, 7), 2))
+    if 'message' in result and result['message'] == 'Missing Access': # {'message': 'Missing Access', 'code': 50001}
+        if args.verbose:
+            print("Missing access, skipping...")
+        return []
     total_messages = result['total_results']
     if args.verbose:
         print("Found {} messages!".format(total_messages))
@@ -63,10 +67,15 @@ def getMessages(url, server):
                 for msg in msgs['messages']:
                     messages.append(msg[0])
             else:
-                if args.verbose:
-                    print(msgs)
-                    print("Rate limited! Cancelling scan!")
-                os._exit(0)
+                if 'message' in msgs and msgs['message'] == 'Missing Access': # {'message': 'Missing Access', 'code': 50001}
+                    if args.verbose:
+                        print("Missing access, skipping...")
+                    return []
+                else:
+                    if args.verbose:
+                        print(msgs)
+                        print("Rate limited! Cancelling scan!")
+                    os._exit(0)
 
     else:
         if url:
@@ -78,7 +87,7 @@ def getMessages(url, server):
             if args.messagelimit < total_messages:
                 counter = 0
                 for msg in msgs['messages']:
-                    if counter < args.messagelimit:
+                    if counter <= args.messagelimit:
                         messages.append(msg[0])
                         counter += 1
                     else:
@@ -87,10 +96,15 @@ def getMessages(url, server):
                 for msg in msgs['messages']:
                     messages.append(msg[0])
         else:
-            if args.verbose:
-                print(msgs)
-                print("Rate limited! Cancelling scan!")
-            os._exit(0)
+            if 'message' in msgs and msgs['message'] == 'Missing Access': # {'message': 'Missing Access', 'code': 50001}
+                if args.verbose:
+                    print("Missing access, skipping...")
+                return []
+            else:
+                if args.verbose:
+                    print(msgs)
+                    print("Rate limited! Cancelling scan!")
+                os._exit(0)
 
     
     if args.verbose:
@@ -131,6 +145,17 @@ def scanServer(server):
         extractURLs(message)
     if args.verbose:
         print("Done looping through the found messages!\n")
+        print("Leaving the server now...")
+    leaveServer(server)
+    if args.verbose:
+        print("Left the server!\n")
+
+
+def leaveServer(server):
+    time.sleep(round(random.uniform(7, 10), 2))
+    print(server['id'])
+    response = client.leaveGuild(server['id'])
+    print(response.text)
 
 
 def createJson(message, server_id, server_name):
@@ -221,9 +246,9 @@ def createJson(message, server_id, server_name):
         output_message['meta']['referenced-message']['message-id'] = message['message_reference']['message_id']
 
         if args.replies:
-            # Avoid being ratelimited
             if args.verbose:
                 print("Getting the referenced-message and extracting it's data...")
+            # Avoid being ratelimited
             time.sleep(round(random.uniform(5, 7), 2))
             referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
             if args.verbose:
@@ -235,8 +260,6 @@ def createJson(message, server_id, server_name):
 
     if args.verbose:
         print("Found a message which matches the query!")
-        print("The JSON of the message is:")
-        print(json.dumps(output_message, indent=4, sort_keys=True))
         print("Uploading the message to AIL...\n")
 
     data = output_message['data']
@@ -335,8 +358,6 @@ def extractURLs(message):
 
             if args.verbose:
                 print("Found a link!")
-                print("The JSON of the extracted URL is:")
-                print(json.dumps(output, indent=4, sort_keys=True))
             obj = json.dumps(output['data'], indent=4, sort_keys=True)
             
             if len(obj) > args.maxsize:
@@ -366,8 +387,6 @@ def extractURLs(message):
 
         if args.verbose:
             print("Found a link!")
-            print("The JSON of the extracted URL is:")
-            print(json.dumps(output, indent=4, sort_keys=True))
         obj = json.dumps(output['data'], indent=4, sort_keys=True)
         if len(obj) > args.maxsize:
             if args.verbose:
@@ -387,13 +406,13 @@ def extractURLs(message):
 def joinServer(code):
     if args.verbose:
         print("Getting info from invite code...")
-    time.sleep(round(random.uniform(5, 7), 2))
+    time.sleep(round(random.uniform(7, 10), 2))
     response = client.getInfoFromInviteCode(code).json()
-    if 'message' in response and "Unknown Invite" == response['message']:
+    if 'message' in response and ("Unknown Invite" == response['message'] or "404: Not Found" == response['message']):
         if args.verbose:
             print("Invalid invite code, skipping...\n")
         return
-    
+
     server = response['guild']
     if args.verbose:
         print("Invite code: {}".format(code))
@@ -408,10 +427,10 @@ def joinServer(code):
             print("Scanning the newly joined server...")
         scanServer(server)
         if args.verbose:
-            print("Scan successful! Continuing the previous scan...\n")
+            print("Done scanning the newly joined server!\n")
     else:
         if args.verbose:
-            print("Already in this server! Continuing scan...\n")
+            print("Already scanned this server! Continuing scan...\n")
 
 
 # Information about the feeder
