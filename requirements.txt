@@ -1,4 +1,4 @@
-discum
+git+https://github.com/Merubokkusu/Discord-S.C.U.M.git#egg=discum
 newspaper3k
 redis
 simplejson
