@@ -19,6 +19,7 @@ import newspaper
 import redis
 import simplejson as json
 import validators
+from newspaper.article import ArticleException
 from pyail import PyAIL
 from urlextract import URLExtract
 
@@ -45,6 +46,11 @@ def getMessages(url, server):
         if args.verbose:
             print("Missing access, skipping...")
         return []
+    if 'message' in result and result['message'] == 'Index not yet available. Try again later': # {'message': 'Index not yet available. Try again later', 'code': 110000, 'document_indexed': 0, 'retry_after': 2000}
+        if args.verbose:
+            print("Server not yet indexed, try again later. Skipping...")
+        return []
+
     total_messages = result['total_results']
     if args.verbose:
         print("Found {} messages!".format(total_messages))
@@ -241,7 +247,6 @@ def createJson(message, server_id, server_name):
             time.sleep(round(random.uniform(5, 7), 2))
             referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
             if args.verbose:
-                print(referenced_message)
                 print("Following the message thread...\n")
             createJson(referenced_message[0], server_id, server_name)
 
@@ -280,12 +285,18 @@ def extractURLs(message):
                 if args.verbose:
                     print("Found an invite link!")
                 code = u.path.replace("/", "")
-                joinServer(code)
+                c = open('server-invite-codes.txt', 'a')
+                c.write(code + '\n')
+                c.close()
+                # joinServer(code)
                 continue
             elif "discord.com" in u.hostname:
                 if "invite" in u.path:
                     code = u.path.split("/")[-1]
-                    joinServer(code)
+                    # joinServer(code)
+                    c = open('server-invite-codes.txt', 'a')
+                    c.write(code + '\n')
+                    c.close()
                     continue
                 else:
                     continue
@@ -320,7 +331,7 @@ def extractURLs(message):
         try:
             article.download()
             article.parse()
-        except:
+        except ArticleException:
             if args.verbose:
                 print("Unable to download/parse {}".format(surl), file=sys.stderr)
             continue
@@ -503,7 +514,7 @@ def start(resp):
             # Leaving the server with some wait time before
             time.sleep(round(random.uniform(7, 10), 2))
             client.leaveGuild(server['id'])
-            
+
             if args.verbose:
                 print("Left the server!\n")
         
