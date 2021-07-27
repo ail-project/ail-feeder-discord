@@ -145,17 +145,6 @@ def scanServer(server):
         extractURLs(message)
     if args.verbose:
         print("Done looping through the found messages!\n")
-        print("Leaving the server now...")
-    leaveServer(server)
-    if args.verbose:
-        print("Left the server!\n")
-
-
-def leaveServer(server):
-    time.sleep(round(random.uniform(7, 10), 2))
-    print(server['id'])
-    response = client.leaveGuild(server['id'])
-    print(response.text)
 
 
 def createJson(message, server_id, server_name):
@@ -509,20 +498,29 @@ def start(resp):
             scanServer(server)
             if args.verbose:
                 print("Done scanning '{}'\n".format(server['name']))
+                print("Leaving the server now...")
+
+            # Leaving the server with some wait time before
+            time.sleep(round(random.uniform(7, 10), 2))
+            client.leaveGuild(server['id'])
+            
+            if args.verbose:
+                print("Left the server!\n")
         
         if args.verbose:
             print("Done with the scan of existing servers!")
         time.sleep(round(random.uniform(5, 7), 2))
         
+        # TODO: Find solution to join servers without getting banned
         # Once we scanned all the servers the user is already on, we join the ones from server-invite-codes.txt and search those as well
-        if args.verbose:
-            print("Joining the servers from the server invite codes...\n")
-        codes = open("etc/server-invite-codes.txt", "r")
-        for code in codes:
-            joinServer(code)
-        codes.close()
-        if args.verbose:
-            print("Done joining and scanning the given servers!\n")
+        # if args.verbose:
+        #     print("Joining the servers from the server invite codes...\n")
+        # codes = open("etc/server-invite-codes.txt", "r")
+        # for code in codes:
+        #     joinServer(code)
+        # codes.close()
+        # if args.verbose:
+        #     print("Done joining and scanning the given servers!\n")
 
         if args.scantime == 0:
             if args.verbose:
