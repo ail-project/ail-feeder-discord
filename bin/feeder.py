@@ -475,10 +475,11 @@ parser = argparse.ArgumentParser()
 parser.add_argument("query", help="query to search on Discord to feed AIL")
 parser.add_argument("--verbose", help="verbose output", action="store_true")
 parser.add_argument("--nocache", help="disable cache", action="store_true")
-parser.add_argument("--messagelimit", help="maximum number of messages to fetch (multiples of 25) (-1 to get all)", type=int, default=message_limit)
 parser.add_argument("--replies", help="follow the messages of a thread", action="store_true")
+parser.add_argument("--noleave", help="stay on the server after having scanned it", action="store_true")
 parser.add_argument("--maxsize", help="the maximum size of a url in bytes", type=int, default=4194304) # 4MiB
 parser.add_argument("--scantime", help="the amount of time the application should keep listening for new messages in seconds (turned off by default)", type=int, default=0) # 0 means turned off
+parser.add_argument("--messagelimit", help="maximum number of messages to fetch (multiples of 25) (-1 to get all)", type=int, default=message_limit)
 args = parser.parse_args()
 
 # Initiate empty array to store scanned servers
@@ -512,11 +513,11 @@ def start(resp):
                 print("Leaving the server now...")
 
             # Leaving the server with some wait time before
-            time.sleep(round(random.uniform(7, 10), 2))
-            client.leaveGuild(server['id'])
-
-            if args.verbose:
-                print("Left the server!\n")
+            if not args.noleave:
+                time.sleep(round(random.uniform(7, 10), 2))
+                client.leaveGuild(server['id'])
+                if args.verbose:
+                    print("Left the server!\n")
         
         if args.verbose:
             print("Done with the scan of existing servers!")
