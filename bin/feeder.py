@@ -23,6 +23,8 @@ from newspaper.article import ArticleException
 from pyail import PyAIL
 from urlextract import URLExtract
 
+import joiner
+
 
 def stopProgram():
     if args.verbose:
@@ -403,34 +405,76 @@ def extractURLs(message):
         pyail.feed_json_item(data, metadata, source, source_uuid)
 
 
-def joinServer(code):
-    if args.verbose:
-        print("Getting info from invite code...")
-    time.sleep(round(random.uniform(7, 10), 2))
-    response = client.getInfoFromInviteCode(code).json()
-    if 'message' in response and ("Unknown Invite" == response['message'] or "404: Not Found" == response['message']):
+def joinServers():
+    if not joiner.start(args.verbose):
         if args.verbose:
-            print("Invalid invite code, skipping...\n")
-        return
+            print("No more servers to join, exiting...")
+        return False
+    else:
+        done = input("Type 'done', when you joined all the servers manually via the prompts.\n")
+        while done != "done":
+            done = input("Type 'done', when you joined all the servers manually via the prompts.\n")
+        return True
 
-    server = response['guild']
+
+def leaveServers(amount=-1):
+    servers = client.getGuilds().json()
+    time.sleep(round(random.uniform(5, 7), 2))
     if args.verbose:
-        print("Invite code: {}".format(code))
-        print("Trying to join the server {} now...".format(server['name']))
-    server_id = server['id']
-    if not server_id in scanned_servers:
-        time.sleep(round(random.uniform(5, 7), 2))
-        # The waiting time can be reduced, but the lower the time waited between joining servers, the higher the risk to get banned
-        client.joinGuild(code, wait=random.randint(7, 10))
-        if args.verbose:
-            print("Joined the server successfully!")
-            print("Scanning the newly joined server...")
-        scanServer(server)
-        if args.verbose:
-            print("Done scanning the newly joined server!\n")
+        print("Leaving the servers now...")
+    if amount == -1:
+        for server in servers:
+            if args.verbose:
+                print("Leaving the server now...")
+            client.leaveGuild(server['id'])
+            time.sleep(round(random.uniform(7, 10), 2))
+            if args.verbose:
+                print("Left the server!\n")
+    elif amount >= 0:
+        counter = 0
+        for server in servers:
+            if counter >= amount:
+                break
+            if args.verbose:
+                print("Leaving the server now...")
+            client.leaveGuild(server['id'])
+            time.sleep(round(random.uniform(7, 10), 2))
+            if args.verbose:
+                print("Left the server!\n")
+            counter += 1
     else:
         if args.verbose:
-            print("Already scanned this server! Continuing scan...\n")
+            print("Invalid number given.\n")
+    if args.verbose:
+        print("Left all the servers!\n")
+
+
+def startScan():
+    # Scan the servers the user is already on
+    if args.verbose:
+        print("Scanning the servers the user is on...\n")
+    servers = client.getGuilds().json()
+    time.sleep(round(random.uniform(5, 7), 2))
+    for server in servers:
+        scanned_servers.append(server['id'])
+        if args.verbose:
+            print("Scanning '{}' now...\n".format(server['name']))
+        scanServer(server)
+        if args.verbose:
+            print("Done scanning '{}'\n".format(server['name']))
+
+        # Leaving the server with some wait time before
+        if not args.noleave:
+            if args.verbose:
+                print("Leaving the server now...")
+            time.sleep(round(random.uniform(7, 10), 2))
+            client.leaveGuild(server['id'])
+            if args.verbose:
+                print("Left the server!\n")
+    
+    if args.verbose:
+        print("Done with the scan of existing servers!")
+    time.sleep(round(random.uniform(5, 7), 2))
 
 
 # Information about the feeder
@@ -499,40 +543,24 @@ def start(resp):
             print("Logged in as {}#{}".format(user['username'], user['discriminator']))
 
         # Scan the servers the user is already on
-        if args.verbose:
-            print("Scanning the servers the user is on...\n")
-        servers = client.getGuilds().json()
-        time.sleep(round(random.uniform(5, 7), 2))
-        for server in servers:
-            scanned_servers.append(server['id'])
-            if args.verbose:
-                print("Scanning '{}' now...\n".format(server['name']))
-            scanServer(server)
-            if args.verbose:
-                print("Done scanning '{}'\n".format(server['name']))
-                print("Leaving the server now...")
-
-            # Leaving the server with some wait time before
-            if not args.noleave:
-                time.sleep(round(random.uniform(7, 10), 2))
-                client.leaveGuild(server['id'])
+        startScan()
+        choice = input("Type 'join' to join 20 servers of the server-invite-codes.txt.\nType 'leave' to leave all of the servers the user is currently on.\nType 'leave <number>' to leave a certain amount of servers.\nType 'exit' to finish the scan.\n")
+        while choice != "exit":
+            if choice == "join":
+                # Check if the file is empty, if it is, return immediately
+                if not joinServers():
+                    break
+                startScan()
+            elif choice == "leave":
+                leaveServers()
+                pass
+            elif re.search("leave (\d)+", choice):
+                leaveServers(int(choice.split(" ")[-1]))
+                pass
+            else:
                 if args.verbose:
-                    print("Left the server!\n")
-        
-        if args.verbose:
-            print("Done with the scan of existing servers!")
-        time.sleep(round(random.uniform(5, 7), 2))
-        
-        # TODO: Find solution to join servers without getting banned
-        # Once we scanned all the servers the user is already on, we join the ones from server-invite-codes.txt and search those as well
-        # if args.verbose:
-        #     print("Joining the servers from the server invite codes...\n")
-        # codes = open("etc/server-invite-codes.txt", "r")
-        # for code in codes:
-        #     joinServer(code)
-        # codes.close()
-        # if args.verbose:
-        #     print("Done joining and scanning the given servers!\n")
+                    print("Please type either 'join', 'leave' 'leave <number>' or 'exit'!")
+            choice = input("Type 'join' to join 20 servers of the server-invite-codes.txt.\nType 'leave' to leave all of the servers the user is currently on.\nType 'leave <number>' to leave a certain amount of servers.\nType 'exit' to finish the scan.\n")
 
         if args.scantime == 0:
             if args.verbose:
