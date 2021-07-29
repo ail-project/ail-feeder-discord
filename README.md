@@ -42,11 +42,13 @@ Replace the API key value in the config file with your API key value from AIL an
 
 Join the desired servers. This can be done manually or automatically with some limits.
 * For the manual version, just join the desired servers and proceed to step 5.
-* For the automatic version, follow these steps as often as needed:
+* For the automatic version, follow these steps:
     1. Open the Discord client and login or register. You should see the main menu of the Discord app. (Page with DMs etc)
-    2. Run the `joiner.py` script and **wait for it to finish!** You can modify the amount of servers to join at a time, but 20 is a good limit to prevent being banned/ phone locked! (Less = better)
-    3. Once the `joiner.py` script has finished running, switch back to the Discord app and accept the invites that popped up to join the servers.
-    4. Proceed to step 5. If there are more servers you want to join, remove the scanned invite codes from `server-invite-codes.txt` and redo 1-4 after running step 5 to completion.
+    2. Run the `feeder.py` script and wait for the first scan to finish. Once the scan is finished, the program will give some options to continue. Choose 'join' to join 20 servers automatically.
+    3. The program will attempt to join 20 servers of the `server-invite-codes.txt` file and open the prompts in the Discord app.
+    4. **Wait for the program to finish** and then accept the invites to join the servers.
+    5. Enter 'done' in the console, once you finished accepting the invites, to continue the scan.
+    6. Repeat when the program gives the option to choose again.
 
 ### Step 5
 
@@ -77,15 +79,20 @@ optional arguments:
 
 The program does the following in this order:
 
-1. login with the given account (token in `etc/token.txt`)
-2. fetch all the servers the user is already part of
-3. scan the channels in each server for the given query, if a match is found, extract the data and upload it to the AIL framework
-4. after scanning for the query in the messages, the program looks for URLs in the channels, if a URL is found, extract the data and upload it to the AIL framework
-5. once the scan is complete, the program starts to listen for incoming messages for `scantime` seconds
-6. when a message comes in, matching the query or containing a link, the data is extracted and uploaded
-7. when the `scantime` seconds are up, the program exits
+1. Login with the given account (token in `etc/token.txt`)
+2. Fetch all the servers the user is already part of
+3. Scan the channels in each server for the given query, if a match is found, extract the data and upload it to the AIL framework
+4. After scanning for the query in the messages, the program looks for URLs in the channels, if a URL is found, extract the data and upload it to the AIL framework
+5. When the scan is done, the program gives a few choices to continue:
+    * 'exit' &rarr; finish the execution of the program
+    * 'join' &rarr; join 20 servers from the `server-invite-codes.txt` file
+    * 'leave' &rarr; leave all the servers the user is on
+    * 'leave &#60;number&#62;' &rarr; leave &#60;number&#62; servers the user is on
+6. Once 'exit' was passed as an option, the program starts to listen for incoming messages for `scantime` seconds
+7. When a message comes in, matching the query or containing a link, the data is extracted and uploaded
+8. When the `scantime` seconds are up, the program exits
 
-NB: When a new message arrives during steps 2-4, the program treats the new message first and continues the previous scan after completing the new incoming message.
+NB: When a new message arrives during steps 2-5, the program treats the new message first and continues the previous scan after completing the new incoming message.
 
 ## Output to AIL
 
