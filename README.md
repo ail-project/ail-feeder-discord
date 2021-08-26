@@ -36,7 +36,7 @@ Create a file `server-invite-codes.txt` in the `etc/` folder if you want to auto
 
 ### Step 3
 
-Replace the API key value in the config file with your API key value from AIL and make sure an instance of the ail-framework is running. You can also modify the other fields in the config file.
+Replace the API key value in the config file with your API key value from AIL and make sure an instance of the ail-framework is running. You can also modify the other fields in the config file. There is a sample of the config file you can use.
 
 ### Step 4
 
