@@ -4,6 +4,7 @@
 import argparse
 import base64
 import configparser
+import logging
 import math
 import os
 import random
@@ -28,7 +29,7 @@ import joiner
 
 def stopProgram():
     if args.verbose:
-        print("The scanning time is up. Exiting now...")
+        logging.info("The scanning time is up. Exiting now...")
     os._exit(0)
 
 
@@ -36,7 +37,7 @@ def getMessages(url, server):
     time.sleep(round(random.uniform(5, 7), 2))
 
     if args.verbose:
-        print("Getting the amount of messages that match...")
+        logging.info("Getting the amount of messages that match...")
 
     if url:
         result = client.searchMessages(guildID=server['id'], has="link").json()
@@ -46,16 +47,16 @@ def getMessages(url, server):
     time.sleep(round(random.uniform(5, 7), 2))
     if 'message' in result and result['message'] == 'Missing Access': # {'message': 'Missing Access', 'code': 50001}
         if args.verbose:
-            print("Missing access, skipping...")
+            logging.error("Missing access, skipping...")
         return []
     if 'message' in result and result['message'] == 'Index not yet available. Try again later': # {'message': 'Index not yet available. Try again later', 'code': 110000, 'document_indexed': 0, 'retry_after': 2000}
         if args.verbose:
-            print("Server not yet indexed, try again later. Skipping...")
+            logging.error("Server not yet indexed, try again later. Skipping...")
         return []
 
     total_messages = result['total_results']
     if args.verbose:
-        print("Found {} messages!".format(total_messages))
+        logging.info("Found {} messages!".format(total_messages))
     messages = []
     if total_messages > 5000:
         total_messages = 5000 # 5000 messages is the maximum Discord can fetch {'code': 50035, 'errors': {'offset': {'_errors': [{'code': 'NUMBER_TYPE_MAX', 'message': 'int value should be less than or equal to 5000.'}]}}, 'message': 'Invalid Form Body'}
@@ -65,7 +66,7 @@ def getMessages(url, server):
     if args.messagelimit > 25 and total_messages > 25:
         iterations = math.ceil(args.messagelimit/25)
         for i in range(iterations):
-            print("Getting messages {} to {}...".format(i*25+1, (i+1)*25))
+            logging.info("Getting messages {} to {}...".format(i*25+1, (i+1)*25))
             time.sleep(round(random.uniform(7, 10), 2))
             if url:
                 msgs = client.searchMessages(guildID=server['id'], has="link", afterNumResults=i*25).json()
@@ -77,12 +78,12 @@ def getMessages(url, server):
             else:
                 if 'message' in msgs and msgs['message'] == 'Missing Access': # {'message': 'Missing Access', 'code': 50001}
                     if args.verbose:
-                        print("Missing access, skipping...")
+                        logging.error("Missing access, skipping...")
                     return []
                 else:
                     if args.verbose:
-                        print(msgs)
-                        print("Rate limited! Cancelling scan!")
+                        logging.info(msgs)
+                        logging.error("Rate limited! Cancelling scan!")
                     os._exit(0)
 
     else:
@@ -106,28 +107,28 @@ def getMessages(url, server):
         else:
             if 'message' in msgs and msgs['message'] == 'Missing Access': # {'message': 'Missing Access', 'code': 50001}
                 if args.verbose:
-                    print("Missing access, skipping...")
+                    logging.error("Missing access, skipping...")
                 return []
             else:
                 if args.verbose:
-                    print(msgs)
-                    print("Rate limited! Cancelling scan!")
+                    logging.info(msgs)
+                    logging.error("Rate limited! Cancelling scan!")
                 os._exit(0)
 
     
     if args.verbose:
-        print("Done scanning for messages!\n")
+        logging.info("Done scanning for messages!\n")
     return messages
 
 
 def scanServer(server):
     # Search through the text messages for the query
     if args.verbose:
-        print("Scanning for the query in messages...")
+        logging.info("Scanning for the query in messages...")
     messages = getMessages(False, server)
     
     if args.verbose:
-        print("Looping through the found messages and extracting data...")
+        logging.info("Looping through the found messages and extracting data...")
     
     for message in messages:
         signal.alarm(10)
@@ -135,31 +136,31 @@ def scanServer(server):
             createJson(message, server['id'], server['name'])
         except TimeoutError:
             if args.verbose:
-                print("Timeout reached for creating JSON of message: {}".format(message[0]['id']), file=sys.stderr)
+                logging.error("Timeout reached for creating JSON of message: {}".format(message[0]['id']))
             sys.exit(1)
         else:
             signal.alarm(0)
 
     if args.verbose:
-        print("Done looping through the found messages!\n")
+        logging.info("Done looping through the found messages!\n")
 
     # Search through the text messages for URLs
     if args.verbose:
-        print("Scanning for URLs in messages...")
+        logging.info("Scanning for URLs in messages...")
     messages = getMessages(True, server)
     if args.verbose:
-        print("Looping through the found messages and extracting data...")
+        logging.info("Looping through the found messages and extracting data...")
     for message in messages:
         extractURLs(message)
     if args.verbose:
-        print("Done looping through the found messages!\n")
+        logging.info("Done looping through the found messages!\n")
 
 
 def createJson(message, server_id, server_name):
     # Caching
     if r.exists("c:{}".format(message['id'])):
         if args.verbose:
-            print("Message {} already processed".format(message['id']), file=sys.stderr)
+            logging.error("Message {} already processed".format(message['id']))
         if not args.nocache:
             return
     else:
@@ -244,19 +245,19 @@ def createJson(message, server_id, server_name):
 
         if args.replies:
             if args.verbose:
-                print("Getting the referenced-message and extracting it's data...")
+                logging.info("Getting the referenced-message and extracting it's data...")
             # Avoid being ratelimited
             time.sleep(round(random.uniform(5, 7), 2))
             referenced_message = client.getMessage(message['message_reference']['channel_id'], message['message_reference']['message_id']).json()
             if args.verbose:
-                print("Following the message thread...\n")
+                logging.info("Following the message thread...\n")
             createJson(referenced_message[0], server_id, server_name)
 
     output_message['data'] = message['content']
 
     if args.verbose:
-        print("Found a message which matches the query!")
-        print("Uploading the message to AIL...\n")
+        logging.info("Found a message which matches the query!")
+        logging.info("Uploading the message to AIL...\n")
 
     data = output_message['data']
     metadata = output_message['meta']
@@ -285,7 +286,7 @@ def extractURLs(message):
         if u.hostname is not None:
             if "discord.gg" in u.hostname:
                 if args.verbose:
-                    print("Found an invite link!")
+                    logging.info("Found an invite link!")
                 code = u.path.replace("/", "")
                 c = open('server-invite-codes.txt', 'a')
                 c.write(code + '\n')
@@ -312,7 +313,7 @@ def extractURLs(message):
             article = newspaper.Article(surl)
         except TimeoutError:
             if args.verbose:
-                print("Timeout reached for {}".format(surl), file=sys.stderr)
+                logging.error("Timeout reached for {}".format(surl))
             continue
         else:
             signal.alarm(0)
@@ -320,7 +321,7 @@ def extractURLs(message):
         # Caching
         if r.exists("cu:{}".format(base64.b64encode(surl.encode()))):
             if args.verbose:
-                print("URL {} already processed".format(surl), file=sys.stderr)
+                logging.error("URL {} already processed".format(surl))
             if not args.nocache:
                continue
         else:
@@ -328,14 +329,14 @@ def extractURLs(message):
             r.expire("cu:{}".format(base64.b64encode(surl.encode())), cache_expire)
         
         if args.verbose:
-            print("Downloading and parsing {}".format(surl))
+            logging.info("Downloading and parsing {}".format(surl))
 
         try:
             article.download()
             article.parse()
         except ArticleException:
             if args.verbose:
-                print("Unable to download/parse {}".format(surl), file=sys.stderr)
+                logging.error("Unable to download/parse {}".format(surl))
             continue
 
         output['data'] = article.html
@@ -346,7 +347,7 @@ def extractURLs(message):
             article.nlp()
         except:
             if args.verbose:
-                print("Unable to nlp {}".format(surl), file=sys.stderr)
+                logging.error("Unable to nlp {}".format(surl))
             nlpFailed = True
 
             output['meta']['embedded-objects'] = []
@@ -359,17 +360,17 @@ def extractURLs(message):
                 output['meta']['embedded-objects'].append(e)
 
             if args.verbose:
-                print("Found a link!")
+                logging.info("Found a link!")
             obj = json.dumps(output['data'], indent=4, sort_keys=True)
             
             if len(obj) > args.maxsize:
                 if args.verbose:
-                    print("The data from this URL is too big to upload! Consider increasing the maxsize if you still want it to be uploaded.")
-                    print("Continuing with the next one...\n")
+                    logging.error("The data from this URL is too big to upload! Consider increasing the maxsize if you still want it to be uploaded.")
+                    logging.info("Continuing with the next one...\n")
                 continue
 
             if args.verbose:
-                print("Uploading the URL to AIL...\n")
+                logging.info("Uploading the URL to AIL...\n")
             data = output['data']
             metadata = output['meta']
             source = ailurlextract
@@ -388,16 +389,16 @@ def extractURLs(message):
         output['meta']['newspaper:movies'] = article.movies
 
         if args.verbose:
-            print("Found a link!")
+            logging.info("Found a link!")
         obj = json.dumps(output['data'], indent=4, sort_keys=True)
         if len(obj) > args.maxsize:
             if args.verbose:
-                print("The data from this URL is too big to upload! Consider increasing the maxsize if you still want it to be uploaded.")
-                print("Continuing with the next one...\n")
+                logging.error("The data from this URL is too big to upload! Consider increasing the maxsize if you still want it to be uploaded.")
+                logging.info("Continuing with the next one...\n")
             continue
 
         if args.verbose:
-            print("Uploading the URL to AIL...\n")
+            logging.info("Uploading the URL to AIL...\n")
         data = output['data']
         metadata = output['meta']
         source = ailurlextract
@@ -408,7 +409,7 @@ def extractURLs(message):
 def joinServers():
     if not joiner.start(args.verbose):
         if args.verbose:
-            print("No more servers to join, exiting...")
+            logging.info("No more servers to join, exiting...")
         return False
     else:
         done = input("Type 'done', when you joined all the servers manually via the prompts.\n")
@@ -421,61 +422,63 @@ def leaveServers(amount=-1):
     servers = client.getGuilds().json()
     time.sleep(round(random.uniform(5, 7), 2))
     if args.verbose:
-        print("Leaving the servers now...")
+        logging.info("Leaving the servers now...")
     if amount == -1:
         for server in servers:
             if args.verbose:
-                print("Leaving the server now...")
+                logging.info("Leaving the server now...")
             client.leaveGuild(server['id'])
             time.sleep(round(random.uniform(7, 10), 2))
             if args.verbose:
-                print("Left the server!\n")
+                logging.info("Left the server!\n")
     elif amount >= 0:
         counter = 0
         for server in servers:
             if counter >= amount:
                 break
             if args.verbose:
-                print("Leaving the server now...")
+                logging.info("Leaving the server now...")
             client.leaveGuild(server['id'])
             time.sleep(round(random.uniform(7, 10), 2))
             if args.verbose:
-                print("Left the server!\n")
+                logging.info("Left the server!\n")
             counter += 1
     else:
         if args.verbose:
-            print("Invalid number given.\n")
+            logging.error("Invalid number given.\n")
     if args.verbose:
-        print("Left all the servers!\n")
+        logging.info("Left all the servers!\n")
 
 
 def startScan():
     # Scan the servers the user is already on
     if args.verbose:
-        print("Scanning the servers the user is on...\n")
+        logging.info("Scanning the servers the user is on...\n")
     servers = client.getGuilds().json()
     time.sleep(round(random.uniform(5, 7), 2))
     for server in servers:
         scanned_servers.append(server['id'])
         if args.verbose:
-            print("Scanning '{}' now...\n".format(server['name']))
+            logging.info("Scanning '{}' now...\n".format(server['name']))
         scanServer(server)
         if args.verbose:
-            print("Done scanning '{}'\n".format(server['name']))
+            logging.info("Done scanning '{}'\n".format(server['name']))
 
         # Leaving the server with some wait time before
         if not args.noleave:
             if args.verbose:
-                print("Leaving the server now...")
+                logging.info("Leaving the server now...")
             time.sleep(round(random.uniform(7, 10), 2))
             client.leaveGuild(server['id'])
             if args.verbose:
-                print("Left the server!\n")
+                logging.info("Left the server!\n")
     
     if args.verbose:
-        print("Done with the scan of existing servers!")
+        logging.info("Done with the scan of existing servers!")
     time.sleep(round(random.uniform(5, 7), 2))
 
+
+logging.basicConfig(format='%(asctime)s %(name)s %(levelname)s:%(message)s', level=logging.INFO, datefmt='%I:%M:%S')
 
 # Information about the feeder
 uuid = "48093b86-8ce5-415b-ac7d-8add427ec49c"
@@ -506,12 +509,12 @@ if 'ail' in config:
     ail_url = config['ail']['url']
     ail_key = config['ail']['apikey']
 else:
-    print("Ail section not found in the config file. Add it and the necessary fields and try again!", sys.stderr)
+    logging.error("Ail section not found in the config file. Add it and the necessary fields and try again!")
     sys.exit(0)
 try:
     pyail = PyAIL(ail_url, ail_key, ssl=False)
 except Exception as e:
-    print(e)
+    logging.error(e)
     sys.exit(0)
 
 # Argument parsing
@@ -540,7 +543,7 @@ def start(resp):
     if resp.event.ready_supplemental:
         user = client.gateway.session.user
         if args.verbose:
-            print("Logged in as {}#{}".format(user['username'], user['discriminator']))
+            logging.info("Logged in as {}#{}".format(user['username'], user['discriminator']))
 
         # Scan the servers the user is already on
         startScan()
@@ -559,23 +562,23 @@ def start(resp):
                 pass
             else:
                 if args.verbose:
-                    print("Please type either 'join', 'leave' 'leave <number>' or 'exit'!")
+                    logging.info("Please type either 'join', 'leave' 'leave <number>' or 'exit'!")
             choice = input("Type 'join' to join 20 servers of the server-invite-codes.txt.\nType 'leave' to leave all of the servers the user is currently on.\nType 'leave <number>' to leave a certain amount of servers.\nType 'exit' to finish the scan.\n")
 
         if args.scantime == 0:
             if args.verbose:
-                print("All done! Exiting now...")
+                logging.info("All done! Exiting now...")
             os._exit(0)
         else:
             if args.verbose:
-                print("Listening for new incoming messages now!\n")
+                logging.info("Listening for new incoming messages now!\n")
             # Set a timer for listening for new messages and stop execution once the time is up
             Timer(args.scantime, stopProgram).start()
     
     # Continuously check for new messages
     if resp.event.message:
         if args.verbose:
-            print("A new message came in!\n")
+            logging.info("A new message came in!\n")
         m = resp.parsed.auto()
         # Check if the query is in the message, if it is, extract the data
         if re.search(args.query, m['content'], re.IGNORECASE):

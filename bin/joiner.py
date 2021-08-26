@@ -1,15 +1,19 @@
+import logging
+import time
+
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
-import time
 
 
 def start(verbose):
+    logging.basicConfig(format='%(asctime)s %(name)s %(levelname)s:%(message)s', level=logging.INFO, datefmt='%I:%M:%S')
+    
     options = Options()
     options.headless = True
     browser = webdriver.Firefox(options=options)
 
     if verbose:
-        print("Joining servers...")
+        logging.info("Joining servers...")
     codes = open("etc/server-invite-codes.txt").readlines()
     if len(codes) == 0:
         return False
@@ -22,10 +26,10 @@ def start(verbose):
         time.sleep(1)
         counter += 1
         if verbose:
-            print("Joined {} servers.".format(counter))
+            logging.info("Joined {} servers.".format(counter))
 
     if verbose:
-        print("Done joining servers! Accept the invite manually in the Discord app!\n")
+        logging.info("Done joining servers! Accept the invite manually in the Discord app!\n")
     open('etc/server-invite-codes.txt', 'w').writelines(codes)
 
     browser.close()
