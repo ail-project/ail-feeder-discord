@@ -15,14 +15,10 @@ import time
 from threading import Timer
 from urllib.parse import urlparse
 
-import discum
-import newspaper
-import redis
-import simplejson as json
-import validators
-from newspaper.article import ArticleException
+
+
+
 from pyail import PyAIL
-from urlextract import URLExtract
 
 import joiner
 
@@ -487,7 +483,7 @@ ailurlextract = "ail_feeder_urlextract"
 
 # Config reader
 config = configparser.ConfigParser()
-config.read('etc/ail-feeder-discord.cfg')
+config.read('etc/conf.cfg')
 
 if 'general' in config:
     uuid = config['general']['uuid']

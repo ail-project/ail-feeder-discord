@@ -7,7 +7,7 @@ import configparser
 f = open("etc/server-invite-codes.txt", "w")
 f.close()
 config = configparser.ConfigParser()
-config.read('etc/ail-feeder-discord.cfg')
+config.read('etc/conf.cfg')
 r = redis.Redis(host=config['db']['host'], port=config['db']['port'], password=config['db']['password'])
 
 keys = r.keys('*')

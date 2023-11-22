@@ -1,7 +1,8 @@
-git+https://github.com/Merubokkusu/Discord-S.C.U.M.git#egg=discum
-newspaper3k
-redis
-simplejson
-validators
-urlextract
+discord.py-self
 pyail
+
+#redis
+#simplejson
+#validators
+#urlextract
+
