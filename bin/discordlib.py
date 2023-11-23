@@ -83,13 +83,11 @@ def unpack_datetime(datetime_obj):
     return date_dict
 
 def _unpack_user(user):  # TODO RENAME KEYS NAME
-    meta = {}
-    meta['username'] = user.name
-    meta['display_name'] = user.display_name
-    meta['bot'] = user.bot
-
-    meta['id'] = user.id
-    meta['date'] = unpack_datetime(user.created_at)
+    meta = {'username': user.name,
+            'display_name': user.display_name,
+            'bot': user.bot,
+            'id': user.id,
+            'date': unpack_datetime(user.created_at)}
 
     # discriminator
     # user.is_pomelo() -> check if use uniq username
@@ -122,8 +120,6 @@ def _unpack_member(member):
     return meta
 
 async def _unpack_author(author):
-    print(type(author))
-
     if isinstance(author, discord.Member):
         # await get_user_profile(author)
         return _unpack_member(author)
@@ -226,23 +222,26 @@ def _unpack_private_channel(channel):
 
 def _unpack_guid_channel(channel):
     meta = {'id': channel.id,
-            'date': unpack_datetime(channel.created_at)}
+            'date': unpack_datetime(channel.created_at),
+            'type': 'server_channel'}
     if channel.name:
         meta['name'] = channel.name
 
     return meta
 
-def _unpack_embedded(embedded): # TODO reconstruct embed content
+def _unpack_channel(channel): # TODO type=Thread:unpack thread
+    if isinstance(channel, discord.abc.PrivateChannel):
+        return _unpack_private_channel(channel)
+    elif isinstance(channel, discord.abc.GuildChannel):
+        return _unpack_guid_channel(channel)
+    # TODO unpack thread
+
+def _unpack_embedded(embedded):
     # image
     # thumbnail
     # video
     # provider
     # author
-
-    # print()
-    # print('ooooooooooooooooooooooooo')
-    # print(embedded.to_dict())
-    # print()
 
     embed = embedded.to_dict()
     content = ''  # TODO icon URL
@@ -260,7 +259,7 @@ def _unpack_embedded(embedded): # TODO reconstruct embed content
             content = f'{content}{field["name"]}    {field["value"]}\n'
         else:
             content = f'{content}{field["name"]}\n{field["value"]}\n'
-    if embed.get('footer'): # TODO icon URL
+    if embed.get('footer'):
         content = f'{content}\n'
         if 'icon_url' in embed['footer']:
             content = f'{content}{embed["footer"]["icon_url"]}\n'
@@ -385,150 +384,160 @@ async def _unpack_message(message):
     return meta
 
 
-class DiscordMonitor(discord.Client):
+# # # # # # # # # # # # # # # #
+#           CLI               #
+# # # # # # # # # # # # # # # #
 
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-
-    async def on_ready(self):
-        print(f'Logged in as {self.user} (ID: {self.user.id})')
-        print('------')
-
-    async def on_message(self, message):
-        print(message)
-        print()
-        await _unpack_message(message)
-
-def monitor():
-    client = DiscordMonitor()
-    client.run(token)
-
-class DiscordDefault(discord.Client):
-
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-
-    async def on_ready(self):
-        print(f'Logged in as {self.user} (ID: {self.user.id})')
-        print('------')
-
-        i = {}
-
-        for guild in self.guilds:
-            print(_unpack_guild(guild))
-            for channel in guild.channels:
-                str_c = str(type(channel))
-                if str_c not in i:
-                    i[str_c] = 0
-                i[str_c] += 1
-                print(type(channel))
-                # if not isinstance(channel, discord.ForumChannel): # TODO
-                #     continue
-                if isinstance(channel, discord.CategoryChannel) or isinstance(channel, discord.ForumChannel): # TODO
-                    continue
-                print(_unpack_guid_channel(channel))
-                print(channel.last_message_id)
-                print(channel.last_message)
-
-                if channel.last_message_id:
-                    try:
-                        async for message in channel.history(limit=20):
-                            print(message)
-                            await _unpack_message(message)
-                            print()
-                    except discord.errors.Forbidden as e:
-                        print(e)
-
-            if channel.last_message_id:
-                # mess_id = channel.last_message_id
-                # print(mess_id)
-                try:
-                    async for message in channel.history(limit=5):
-                        print(message)
-                        _unpack_message(message)
-                except discord.errors.Forbidden as e:
-                    print(e)
-
-        # print('--------------------------------------------------------------------------------')
-        # print(i)
-        #
-        # for channel in self.private_channels:
-        #     # print(type(channel))
-        #     # print(channel)
-        #     print(_unpack_private_channel(channel))
-        #     if channel.last_message_id:
-        #         mess_id = channel.last_message_id
-        #         print(mess_id)
-        #     async for message in channel.history(limit=None):
-        #         print(message)
-        #         _unpack_message(message)
-
-        # for r in client.get_all_channels():
-        #     print(type(r))
-        #     print(r)
-
-        await self.close()
-
-def get_all_messages():
-    client = DiscordDefault()
-    client.run(token)
-
-def get_chat_messages(channel_id):
-
-    class DiscordChatMessage(discord.Client):
-
+def get_entity(entity_id):
+    class DiscordGetEntity(discord.Client):
         async def on_ready(self):
-            print(f'Logged in as {self.user} (ID: {self.user.id})')
-            print('------')
-            r = client.get_channel(channel_id)
-            print(r.guild)
-            print(type(r))
-            print(client.get_channel(channel_id))
-
+            meta = {}
+            guild = self.get_guild(entity_id)
+            if guild:
+                meta['server'] = _unpack_guild(guild)
+            channel = self.get_channel(entity_id)
+            if channel:
+                meta['channel'] = _unpack_channel(channel)
+            user = self.get_user(entity_id)
+            if user:
+                meta['user'] = _unpack_user(user)
+            print(json.dumps(meta, indent=4, sort_keys=True))
             await self.close()
-
-    client = DiscordChatMessage()
+    client = DiscordGetEntity()
     client.run(token)
 
-class DiscordChats(discord.Client):
+def get_chats(l_channels=False):
+    class DiscordChats(discord.Client):
+        async def on_ready(self):
+            chats = []
+            for guild in self.guilds:
+                meta = _unpack_guild(guild)
+                if l_channels:
+                    meta['subchannels'] = []
+                    for channel in guild.channels:
+                        meta['subchannels'].append(_unpack_channel(channel))
+                chats.append(meta)
+            for channel in self.private_channels:
+                chats.append(_unpack_private_channel(channel))
 
-    async def on_ready(self):
-        print(f'Logged in as {self.user} (ID: {self.user.id})')
-        print('------')
-
-        chats = []
-
-        for guild in self.guilds:
-            chats.append(_unpack_guild(guild))
-
-        for channel in self.private_channels:
-            # print(type(channel))
-            # print(channel)
-            chats.append(_unpack_private_channel(channel))
-
-        print(json.dumps(chats, indent=4, sort_keys=True))
-
-        # print('--------------------------------------------------------------------------------')
-        # for r in self.get_all_channels():
-        #     print(type(r))
-        #     print(r)
-
-        await self.close()
-
-def get_chats():
+            print(json.dumps(chats, indent=4, sort_keys=True))
+            await self.close()
     client = DiscordChats()
     client.run(token)
 
-# def get_chats(client):
-#     print(client.get_all_channels)
+async def _get_messages(entity, limit=20):
+    try:
+        async for message in entity.history(limit=limit):
+            print(message)
+            await _unpack_message(message)
+    except discord.errors.Forbidden as e:
+        print(e)
+
+def get_channel_messages(channel_id, limit=5):  # TODO +> get thread + private dm
+    class DiscordChannelMessage(discord.Client):
+        async def on_ready(self):
+            channel = client.get_channel(channel_id)
+            if channel:
+                await _get_messages(channel, limit=limit)
+            else:
+                pass
+                # TODO ERROR IF channel NONE
+
+            await self.close()
+    client = DiscordChannelMessage()
+    client.run(token)
+
+def get_guild_messages(guild_id, limit=5):
+    class DiscordGuildMessage(discord.Client):
+        async def on_ready(self):
+            guild = self.get_guild(guild_id)
+            if guild:
+                for channel in guild.channels:
+                    print(type(channel))
+                    if isinstance(channel, discord.CategoryChannel) or isinstance(channel, discord.ForumChannel): # TODO
+                        continue
+                    if channel.last_message_id:
+                        await _get_messages(channel, limit=limit)
+                    else:
+                        pass
+                        # TODO ERROR MESSAGE
+
+            await self.close()
+    client = DiscordGuildMessage()
+    client.run(token)
 
 
-# TODO LIST CHATS
-# TODO ALL Messages from CHAT
-# TODO LIST CHANNELS
+def get_all_messages(limit=5):
+    class DiscordAllMessages(discord.Client):
+        async def on_ready(self):
+            for guild in self.guilds:
+                for channel in guild.channels:
+                    print(type(channel))
+                    # if not isinstance(channel, discord.ForumChannel): # TODO
+                    #     continue
+                    if isinstance(channel, discord.CategoryChannel) or isinstance(channel, discord.ForumChannel):  # TODO
+                        continue
+                    if channel.last_message_id:
+                        await _get_messages(channel, limit=limit)
+
+            for channel in self.private_channels:
+                await _get_messages(channel, limit=limit)
+
+            await self.close()
+    client = DiscordAllMessages()
+    client.run(token)
+
+
+def join_guild(guild_id):
+    class DiscordJoinGuild(discord.Client):
+        async def on_ready(self):
+            print(f'Logged in as {self.user} (ID: {self.user.id})')
+            print('------')
+
+            try:
+                await self.join_guild(guild_id)
+            except discord.NotFound:
+                print(f'ERROR: Guild {guild_id} not found')
+            except discord.HTTPException as e:
+                print(f'HTTP ERROR: {e}')
+            await self.close()
+
+    client = DiscordJoinGuild()
+    client.run(token)
+
+def leave_guild(guild_id):
+    class DiscordLeaveGuild(discord.Client):
+        async def on_ready(self):
+            print(f'Logged in as {self.user} (ID: {self.user.id})')
+            print('------')
+
+            try:
+                await self.join_guild(guild_id)
+            except discord.HTTPException as e:
+                print(f'HTTP ERROR: {e}')
+            await self.close()
+
+    client = DiscordLeaveGuild()
+    client.run(token)
+
+
+def monitor():
+    class DiscordMonitor(discord.Client):
+        async def on_ready(self):
+            print(f'Logged in as {self.user} (ID: {self.user.id})')
+            print('------')
+
+        async def on_message(self, message):
+            await _unpack_message(message)
+    client = DiscordMonitor()
+    client.run(token)
+
+
 if __name__ == '__main__':
-    # get_chats()
+    # get_chats(l_channels=True)
     # get_all_messages()
     # get_chat_messages()
-    get_chat_messages()
+    # get_channel_messages()
+    # get_guild_messages()
+    monitor()
 
