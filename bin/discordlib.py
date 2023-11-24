@@ -14,6 +14,7 @@ import logging
 from datetime import datetime
 
 from pyail import PyAIL
+import base64
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 pathConf = os.path.join(dir_path, '../etc/conf.cfg')
@@ -72,7 +73,7 @@ except FileNotFoundError:
     print('[ERROR] ../etc/conf.cfg was not found. Copy conf.cfg.sample to conf.cfg and update its contents.')
     sys.exit(0)
 
-
+CHATS = {}
 USERS = {}
 
 
@@ -149,13 +150,19 @@ async def get_user_profile(user):  # TODO Restrict by guild ???
         USERS[user.id] = meta
     return meta
 
-def _unpack_guild(chat):
+async def _unpack_guild(chat, media=False):
     meta = {'id': chat.id, 'name': chat.name, 'type': 'server'}
     if chat.description:
         meta['info'] = chat.description
     meta['date'] = unpack_datetime(chat.created_at)
     if chat.member_count:
         meta['participants'] = chat.member_count
+    if media:
+        if chat.icon:
+            if chat.id not in CHATS:
+                CHATS[chat.id] = base64.standard_b64encode(await chat.icon.read()).decode()
+            meta['icon'] = CHATS[chat.id]
+
     # owner_id
     # owner
     # vanity_url_code
@@ -322,7 +329,7 @@ async def _unpack_message(message):
         meta['edit_date'] = unpack_datetime(message.edited_at)
 
     if message.guild:
-        meta['chat'] = _unpack_guild(message.guild)
+        meta['chat'] = await _unpack_guild(message.guild, media=True)
 
         if message.channel:
             meta['chat']['subchannel'] = _unpack_guid_channel(message.channel)
@@ -394,7 +401,7 @@ def get_entity(entity_id):
             meta = {}
             guild = self.get_guild(entity_id)
             if guild:
-                meta['server'] = _unpack_guild(guild)
+                meta['server'] = await _unpack_guild(guild)
             channel = self.get_channel(entity_id)
             if channel:
                 meta['channel'] = _unpack_channel(channel)
@@ -411,7 +418,7 @@ def get_chats(l_channels=False):
         async def on_ready(self):
             chats = []
             for guild in self.guilds:
-                meta = _unpack_guild(guild)
+                meta = await _unpack_guild(guild)
                 if l_channels:
                     meta['subchannels'] = []
                     for channel in guild.channels:
@@ -534,7 +541,7 @@ def monitor():
 
 
 if __name__ == '__main__':
-    # get_chats(l_channels=True)
+    # get_chats(l_channels=False)
     # get_all_messages()
     # get_chat_messages()
     # get_channel_messages()
