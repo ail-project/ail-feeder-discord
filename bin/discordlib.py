@@ -122,13 +122,21 @@ def _unpack_member(member):
 
 async def _unpack_author(author):
     if isinstance(author, discord.Member):
-        # await get_user_profile(author)
-        return _unpack_member(author)
+        await get_user_profile(author)
+        meta = _unpack_member(author)
     elif isinstance(author, discord.User):
-        # await get_user_profile(author)
-        return _unpack_user(author)
+        await get_user_profile(author)
+        meta = _unpack_user(author)
     # elif isinstance(author, discord.abc.User): # TODO RAISE ERROR
     #     return
+    else:
+        meta = {}
+    if USERS[author.id]:
+        if 'info' in USERS[author.id]:
+            meta['info'] = USERS[author.id]['info']
+        if 'icon' in USERS[author.id]:
+            meta['icon'] = USERS[author.id]['icon']
+    return meta
 
 async def get_user_profile(user):  # TODO Restrict by guild ???
     if user.id in USERS:
@@ -138,10 +146,9 @@ async def get_user_profile(user):  # TODO Restrict by guild ???
         try:
             profile = await user.profile()
             if profile.bio:
-                meta['about'] = profile.bio
-
-            # if profile.avatar:
-            #     print(await profile.avatar.read())
+                meta['info'] = profile.bio
+            if profile.avatar:
+                meta['icon'] = base64.standard_b64encode(await profile.avatar.read()).decode()
 
             print(meta)
             # sys.exit(0)
