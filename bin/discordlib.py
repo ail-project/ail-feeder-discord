@@ -150,7 +150,7 @@ async def get_user_profile(user):  # TODO Restrict by guild ???
             if profile.avatar:
                 meta['icon'] = base64.standard_b64encode(await profile.avatar.read()).decode()
 
-            print(meta)
+            # print(meta)
             # sys.exit(0)
         except discord.errors.NotFound:
             pass
@@ -164,11 +164,11 @@ async def _unpack_guild(chat, media=False):
     meta['date'] = unpack_datetime(chat.created_at)
     if chat.member_count:
         meta['participants'] = chat.member_count
-    if media:
-        if chat.icon:
-            if chat.id not in CHATS:
-                CHATS[chat.id] = base64.standard_b64encode(await chat.icon.read()).decode()
-            meta['icon'] = CHATS[chat.id]
+    # if media:
+    #     if chat.icon:
+    #         if chat.id not in CHATS:
+    #             CHATS[chat.id] = base64.standard_b64encode(await chat.icon.read()).decode()
+    #         meta['icon'] = CHATS[chat.id]
 
     # owner_id
     # owner
@@ -249,6 +249,21 @@ def _unpack_channel(channel): # TODO type=Thread:unpack thread
     elif isinstance(channel, discord.abc.GuildChannel):
         return _unpack_guid_channel(channel)
     # TODO unpack thread
+
+def _unpack_thread(thread):
+    meta = {'id': thread.id,
+            'name': thread.name,
+            'date': unpack_datetime(thread.created_at),
+            'parent': {}}
+
+    # owner
+
+    meta['parent']['chat'] = thread.guild.id
+    meta['parent']['subchannel'] = thread.channel.id
+
+    # meta['thread']['parent']['message'] = meta['thread']['id']
+
+    return meta
 
 def _unpack_embedded(embedded):
     # image
@@ -339,7 +354,24 @@ async def _unpack_message(message):
         meta['chat'] = await _unpack_guild(message.guild, media=True)
 
         if message.channel:
-            meta['chat']['subchannel'] = _unpack_guid_channel(message.channel)
+            if isinstance(message.channel, discord.Thread):
+                meta['thread'] = _unpack_thread(message.channel)
+                if message.channel.channel:
+                    meta['chat']['subchannel'] = _unpack_guid_channel(message.channel.channel)
+            else:
+                meta['chat']['subchannel'] = _unpack_guid_channel(message.channel)
+
+    if message.reactions:
+        for reaction in message.reactions:
+            print(reaction)
+            print(reaction.is_custom_emoji())
+            print(reaction.emoji)
+            if reaction.is_custom_emoji():
+                print(reaction.emoji.url)
+            # print(await reaction.emoji.read())
+            # if not reaction.is_custom_emoji():
+            print(meta['chat'])
+        # sys.exit(0)
 
     # mentions
     # raw_mentions
@@ -347,15 +379,14 @@ async def _unpack_message(message):
     # channel_mentions
     # attachments
     # pinned ?
-    # reactions
 
     # jump url
 
     # is_acked
     # ack -> mark message as read
 
-    print(meta)
-    print()
+    # print(meta)
+    # print()
     if message.reference:
         meta['reference'] = _unpack_reference(message.reference)
         reply_to = get_reply_to(meta)
@@ -377,21 +408,22 @@ async def _unpack_message(message):
     data = f'{message.content}{content}'
 
     # if message.embeds:
-    print(json.dumps(meta, indent=4, sort_keys=True))
+    # print(json.dumps(meta, indent=4, sort_keys=True))
 
     if data:
         ail.feed_json_item(data, meta, 'discord', feeder_uuid)
-    else:
-        if message.attachments:
-            print(meta)
-            print()
-            print(message.attachments)          # -> file
-            print(message.system_content)       # discord.embeds
-            print()
-            print(json.dumps(meta, indent=4, sort_keys=True))
-            # sys.exit(0)
+    # else:
+    #     if message.attachments:
+    #         # print(meta)
+    #         print()
+    #         print(message.attachments)          # -> file
+    #         print(message.system_content)       # discord.embeds
+    #         print()
+    #         # print(json.dumps(meta, indent=4, sort_keys=True))
+    #         # sys.exit(0)
 
     if message.attachments:
+
         for attachment in message.attachments:
             await get_attachment(meta, attachment)
 
@@ -481,21 +513,40 @@ def get_guild_messages(guild_id, limit=5):
     client.run(token)
 
 
-def get_all_messages(limit=5):
+def get_all_messages(limit=80):
     class DiscordAllMessages(discord.Client):
         async def on_ready(self):
             for guild in self.guilds:
+                print('---------------------------------')
+                print(guild.threads)
+
                 for channel in guild.channels:
-                    print(type(channel))
+                    # print(type(channel))
                     # if not isinstance(channel, discord.ForumChannel): # TODO
                     #     continue
-                    if isinstance(channel, discord.CategoryChannel) or isinstance(channel, discord.ForumChannel):  # TODO
+                    if isinstance(channel, discord.CategoryChannel): # or isinstance(channel, discord.ForumChannel):  # TODO
                         continue
-                    if channel.last_message_id:
-                        await _get_messages(channel, limit=limit)
 
-            for channel in self.private_channels:
-                await _get_messages(channel, limit=limit)
+                    if isinstance(channel, discord.ForumChannel):
+                        # print(channel.threads)
+
+                        try:
+                            async for thread in channel.archived_threads(limit=None):
+                                print(thread.id)
+                                print()
+                                await _get_messages(thread, limit=limit) # TODO threat metas
+
+
+                        except discord.errors.Forbidden as e:
+                            print(e)
+
+
+
+            #         if channel.last_message_id:
+            #             await _get_messages(channel, limit=limit)
+            #
+            # for channel in self.private_channels:
+            #     await _get_messages(channel, limit=limit)
 
             await self.close()
     client = DiscordAllMessages()
@@ -549,9 +600,9 @@ def monitor():
 
 if __name__ == '__main__':
     # get_chats(l_channels=False)
-    # get_all_messages()
+    get_all_messages()
     # get_chat_messages()
     # get_channel_messages()
     # get_guild_messages()
-    monitor()
+    # monitor()
 
