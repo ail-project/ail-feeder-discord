@@ -523,7 +523,7 @@ def get_chat_messages(entity, download=False, replies=False, limit=5):
             entity_id = int(entity)
             for guild in self.guilds:
                 if entity_id == guild.id:
-                    await _get_guild_messages(guild, download=download, replies=replies, limit=20)
+                    await _get_guild_messages(guild, download=download, replies=replies, limit=limit)
                     await self.close()
 
             for channel in self.private_channels:
