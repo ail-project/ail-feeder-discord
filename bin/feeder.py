@@ -106,7 +106,7 @@ if __name__ == '__main__':
                 download = True
             else:
                 download = False
-            discordlib.get_chat_messages(chat, download=download, replies=False, limit=20)
+            discordlib.get_chat_messages(chat, download=download, replies=False, limit=None)
         # elif args.command == 'unread':
         #     if args.replies:
         #         replies = True
