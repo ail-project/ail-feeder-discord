@@ -629,6 +629,7 @@ def monitor(download=False):
             print('------')
 
         async def on_message(self, message):
+            print(message)
             await _unpack_message(message, download=download)
     client = DiscordMonitor()
     client.run(token)
