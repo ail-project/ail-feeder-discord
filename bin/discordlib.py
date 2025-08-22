@@ -154,6 +154,10 @@ async def get_user_profile(user):  # TODO Restrict by guild ???
             # sys.exit(0)
         except (discord.errors.NotFound, discord.errors.InvalidData):
             pass
+        except discord.errors.HTTPException as e:
+            # 409 Conflict
+            if e.status == 409:
+                pass
         USERS[user.id] = meta
     return meta
 
