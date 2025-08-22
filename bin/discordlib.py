@@ -152,7 +152,7 @@ async def get_user_profile(user):  # TODO Restrict by guild ???
 
             # print(meta)
             # sys.exit(0)
-        except discord.errors.NotFound:
+        except (discord.errors.NotFound, discord.errors.InvalidData):
             pass
         USERS[user.id] = meta
     return meta
@@ -573,7 +573,7 @@ def get_chat_messages(entity, download=False, replies=False, limit=5):
 #     client.run(token)
 
 
-def get_all_messages(download=False, replies=False, limit=80):
+def get_all_messages(download=False, replies=False, limit=None): # TODO LIMIT ARGS
     class DiscordAllMessages(discord.Client):
         async def on_ready(self):
             for guild in self.guilds:
