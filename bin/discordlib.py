@@ -320,7 +320,7 @@ def _unpack_reference(reference):
     return meta
 
 def get_reply_to(meta): # TODO check if reference is not None
-    reply_to = None
+    message_id = None
     chat_id = meta['chat']['id']
     if 'subchannel' in meta['chat']:
         subchannel_id = meta['chat']['subchannel']['id']
@@ -331,16 +331,19 @@ def get_reply_to(meta): # TODO check if reference is not None
     if chat_id == meta['reference'].get('guild_id'):
         if subchannel_id:
             if subchannel_id == meta['reference'].get('channel_id'):
-                reply_to = meta['reference']['message_id']
+                message_id = meta['reference']['message_id']
             else:
                 pass
                 # reference to to other subchannel  # TODO SAVE AS REPLY ????
         else:
-            reply_to = meta['reference']['message_id']
+            message_id = meta['reference']['message_id']
     else:
         pass
         # reference
-
+    if message_id:
+        reply_to = {'message_id': message_id}
+    else:
+        reply_to = None
     return reply_to
 
 # TODO extract chat mentions/urls
@@ -394,6 +397,7 @@ async def _unpack_message(message, download=False):
     # print()
     if message.reference:
         meta['reference'] = _unpack_reference(message.reference)
+        # TODO GET chat and subchannel ID
         reply_to = get_reply_to(meta)
         if reply_to:
             meta['reply_to'] = reply_to
