@@ -37,8 +37,8 @@ try:
         ail_key = config.get('AIL', 'apikey')
         ail_verifycert = config.getboolean('AIL', 'verifycert')
         ail_feeder = config.getboolean('AIL', 'ail_feeder')
-    except Exception as e:
-        print(e)
+    except Exception as err:
+        print(err)
         print('[ERROR] Check ../etc/conf.cfg to ensure the following variables have been set:\n')
         print('[AIL] feeder_uuid \n')
         print('[AIL] url \n')
@@ -48,7 +48,7 @@ try:
     if ail_feeder:
         try:
             ail = PyAIL(ail_url, ail_key, ssl=ail_verifycert)
-        except Exception as e:
+        except Exception:
             print('[ERROR] Unable to connect to AIL Framework API. Please check [AIL] url, apikey and verifycert in ../etc/conf.cfg.\n')
             sys.exit(0)
     else:
@@ -63,7 +63,7 @@ try:
 
     try:
         token = config.get('DISCORD', 'token')
-    except Exception as e:
+    except Exception:
         print('[ERROR] Check ../etc/conf.cfg to ensure the following variables have been set:\n')
         print('[DISCORD] token \n')
         sys.exit(0)
@@ -73,7 +73,9 @@ except FileNotFoundError:
     print('[ERROR] ../etc/conf.cfg was not found. Copy conf.cfg.sample to conf.cfg and update its contents.')
     sys.exit(0)
 
-CHATS = {}
+# TODO STOP PRINTING BASE64 IMAGES
+
+CHATS = {}  # TODO SETUP CHAT META CACHE
 USERS = {}
 
 
@@ -247,7 +249,7 @@ def _unpack_guid_channel(channel):
 
     return meta
 
-def _unpack_channel(channel): # TODO type=Thread:unpack thread
+def _unpack_channel(channel):  # TODO type=Thread:unpack thread
     if isinstance(channel, discord.abc.PrivateChannel):
         return _unpack_private_channel(channel)
     elif isinstance(channel, discord.abc.GuildChannel):
@@ -323,7 +325,7 @@ def _unpack_reference(reference):
         meta['channel_id'] = reference.channel_id
     return meta
 
-def get_reply_to(meta): # TODO check if reference is not None
+def get_reply_to(meta):  # TODO check if reference is not None
     message_id = None
     chat_id = meta['chat']['id']
     if 'subchannel' in meta['chat']:
@@ -372,6 +374,8 @@ async def _unpack_message(message, download=False):
                     meta['chat']['subchannel'] = _unpack_guid_channel(message.channel.channel)
             else:
                 meta['chat']['subchannel'] = _unpack_guid_channel(message.channel)
+    elif message.channel:
+        meta['chat'] = _unpack_channel(message.channel)
 
     if message.reactions:
         for reaction in message.reactions:
@@ -440,7 +444,7 @@ async def _unpack_message(message, download=False):
         for attachment in message.attachments:
             await get_attachment(meta, attachment, download=download)
 
-    print(json.dumps(meta, indent=4, sort_keys=True))
+    # print(json.dumps(meta, indent=4, sort_keys=True))
 
     return meta
 
@@ -581,7 +585,7 @@ def get_chat_messages(entity, download=False, replies=False, limit=5):
 #     client.run(token)
 
 
-def get_all_messages(download=False, replies=False, limit=None): # TODO LIMIT ARGS
+def get_all_messages(download=False, replies=False, limit=None):  # TODO LIMIT ARGS
     class DiscordAllMessages(discord.Client):
         async def on_ready(self):
             for guild in self.guilds:
